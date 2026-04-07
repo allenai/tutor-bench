@@ -140,23 +140,30 @@ def build_detection_notebook():
 
 ## What are key moments?
 
-In a tutoring session, there are moments where the tutor makes a pedagogical choice that matters. A student gets confused and the tutor decides how to help — that's **scaffolding**. A student gets frustrated and the tutor decides how to respond — that's **rapport**. Human experts watch tutoring transcripts and mark these moments as turn ranges (e.g., turns 45-62).
+In a K-12 math tutoring session, there are moments where the tutor makes a pedagogical choice that meaningfully shapes the student's learning. We study two types:
+
+**Scaffolding/Rigor moments** arise when the tutor must decide how much support to provide. Scaffolding is temporary, calibrated support that helps a student accomplish a task they cannot yet do independently — breaking problems into steps, hinting toward answers, modeling worked examples. Rigor means maintaining cognitive demand — requiring explanations, extending problems, fading support. The core tradeoff: too much support robs the student of productive struggle; too little leaves them floundering. A key moment occurs when this choice is notably well-calibrated, miscalibrated, or when the student's signal creates a genuine fork in how to proceed.
+
+**Rapport moments** arise when the tutor's interpersonal choices shape the learning environment. Rapport includes trust and safety (the student feels comfortable making mistakes), genuine interest (the tutor engages with the student as a person), emotional attunement (noticing and responding to frustration, excitement, fatigue), and relational continuity (remembering details across sessions). A key moment occurs when the tutor builds, misses, or damages rapport — including missed opportunities where the tutor ignores an emotional signal or handles a personal moment superficially.
+
+Human expert annotators watch tutoring transcripts and mark these moments as turn ranges (e.g., turns 45-62), identifying both the type (scaffolding or rapport) and the effectiveness of the tutor's response.
 
 **The question**: can an LLM find the same moments that human experts find?
 
+## The dataset
+
+Our dataset contains **201 tutoring transcripts** with **291 annotation passes** (one pass = one annotator labeling one transcript for one type). These 291 passes produced **1,688 individual moment annotations**. Most transcripts were annotated once; 54 received multiple passes (different annotators, or both types). Nine annotators contributed, grouped into three calibration profiles by labeling tendency (generous, balanced, demanding). Six transcripts used as few-shot examples in the LLM prompts are excluded from all evaluation, leaving **195 transcripts** for analysis.
+
 ## How we measure overlap
 
-We use **Intersection over Union (IoU)**: if a human marked turns 45-62 and the LLM marked turns 43-60, IoU measures how much those ranges overlap relative to their combined span. We count a **match** when IoU >= 0.3 (at least 30% overlap).
-
-Before comparing, we merge overlapping human annotations into **clusters** — multiple annotators often flag the same event with slightly different boundaries.
+We use **Intersection over Union (IoU)**: if a human marked turns 45-62 and the LLM marked turns 43-60, IoU measures how much those ranges overlap relative to their combined span. We count a **match** when IoU >= 0.3 (at least 30% overlap). Before comparing, we merge overlapping human annotations into **clusters** — when multiple annotators flag the same event with slightly different boundaries.
 
 ## Dev vs. held-out
 
-We split the data into two sets:
-- **Development** (98 conversations): the prompts were iterated using error examples from these
-- **Held-out** (97 conversations): the prompts have never seen these
+- **Development** (98 transcripts): the prompts were iterated using error examples from these
+- **Held-out** (97 transcripts): the prompts have never seen these
 
-All results below use **v5 prompts** (our best and final detection prompts).
+All results use **v5 prompts** (our best and final detection prompts).
 """))
 
     c.append(code(SHARED_SETUP))
@@ -317,15 +324,18 @@ def build_annotation_notebook():
     c.append(md("""
 # Annotation Validation: Does the LLM Judge Tutoring Quality Like Humans Do?
 
-## What the pipeline does
+## What we're measuring
 
-The pipeline has three passes:
+After finding key moments in tutoring transcripts (validated in Notebook 1), the pipeline does two more things:
 
-1. **Detect** key moments in the transcript (validated in Notebook 1)
-2. **Annotate** each moment: what was the situation, what did the tutor do, what happened? (Situation/Action/Result)
-3. **Label** each moment: was the tutor's strategy *effective*, *partially effective*, or *ineffective*?
+1. **Analyzes** each moment: What was the situation? What did the tutor do? What happened next? (Situation/Action/Result analysis)
+2. **Labels** each moment: Was the tutor's strategy *effective*, *partially effective*, or *ineffective*?
 
-Human experts did the same thing. This notebook compares the LLM's effectiveness labels to the humans'.
+For **scaffolding/rigor moments**, effectiveness means: did the tutor calibrate their support correctly? Scaffolding is temporary, calibrated support — breaking problems into steps, hinting toward answers, modeling worked examples. Rigor means maintaining cognitive demand — requiring explanations, extending problems, fading support. Effective scaffolding keeps the student in their zone of proximal development — challenged but not overwhelmed. Ineffective scaffolding either does the thinking for the student (over-scaffolding) or leaves them floundering (under-scaffolding).
+
+For **rapport moments**, effectiveness means: did the tutor build genuine connection? Rapport includes trust and safety (the student feels comfortable making mistakes), genuine interest (engaging with the student as a person), emotional attunement (noticing frustration, excitement, fatigue), and relational continuity (remembering details across sessions). Effective rapport creates the foundation that makes academic work possible. Ineffective rapport ranges from missed opportunities (ignoring a student's emotional signal) to active damage (condescension, impatience).
+
+Human experts made the same judgments on the same moments. **The question: does the LLM's effectiveness label agree with the human experts' label?**
 
 ## Two ways to measure annotation quality
 
@@ -338,16 +348,18 @@ We present two measurements, because they answer different questions:
 | **IoU matching** | None needed (turn ranges are identical) | IoU >= 0.3 to match LLM detections to human clusters |
 | **N (moments compared)** | All human moments (~1,600) | Only moments the LLM also found (~600) |
 
-Gold mode is the clean measurement. Full pipeline is the real-world measurement.
+Gold mode is the clean measurement — it isolates annotation quality from detection accuracy. Full pipeline is the real-world measurement — what you'd actually get if you ran the system end to end.
 
 ## How we measure agreement
 
-We use **Cohen's weighted kappa** — a standard statistic that measures agreement between two raters, corrected for chance. Kappa = 0 means agreement no better than random; kappa = 1 means perfect agreement. For subjective judgments like "was this tutoring effective?", kappa between 0.2 and 0.4 is typical even between trained human experts.
+We use **Cohen's weighted kappa** — a standard statistic that measures agreement between two raters, corrected for chance. Kappa = 0 means no better than random; kappa = 1 means perfect agreement. For subjective judgments like "was this tutoring strategy effective?", kappa between 0.2 and 0.4 is typical even between trained human raters.
 
-## Dev vs. held-out
+## The dataset
 
-- **Development** (98 conversations): prompts were iterated using these
-- **Held-out** (97 conversations): prompts have never seen these
+Our dataset contains **201 tutoring transcripts** with **291 annotation passes** producing **1,688 individual moment annotations** from 9 expert annotators. An annotation pass is one annotator labeling one transcript for one type (scaffolding or rapport). Most transcripts were annotated once; 54 received multiple passes. Six transcripts used as few-shot examples are excluded, leaving **195 transcripts** for evaluation.
+
+- **Development** (98 transcripts): prompts were iterated using error examples from these
+- **Held-out** (97 transcripts): prompts have never seen these
 
 All results use **v5 prompts**.
 """))
