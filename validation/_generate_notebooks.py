@@ -509,48 +509,67 @@ if v5_gold:
     c.append(md("""
 ### Gold Mode by Annotator Profile
 
-Human annotators cluster into three profiles by labeling tendency. The LLM was calibrated with per-profile prompts. How well does it agree with each group?
+Human annotators cluster into three profiles by labeling tendency. The LLM uses **different annotation prompts calibrated to each profile** — the generous prompt was iterated to match generous annotators' standards, etc. This is not filtering the same output; each profile has its own prompt that was tuned to that group's labeling patterns.
 
 - **Generous** (Gerber, Jones, Shields, Stobbe, Trujillo): more likely to rate effective
 - **Balanced** (Forbes, Mann, Padgett): middle ground
-- **Demanding** (Flick): more likely to rate ineffective (n=79, too thin for stable metrics)
+- **Demanding** (Flick): more likely to rate ineffective (n=118, thin sample — interpret with caution)
 """))
 
     c.append(code("""
 from annotator.eval.eval import load_annotator_archetype_ids, filter_ground_truth_by_archetype
 ARCH_NAMES = ['generous', 'balanced', 'demanding']
+GOLD_STYLE_VERSION = 'v5_gold'
 
-if v5_gold:
-    arch_rows = []
-    for arch in ARCH_NAMES:
-        try:
-            arch_ids = load_annotator_archetype_ids(arch)
-            arch_gt = filter_ground_truth_by_archetype(
-                {'conversations': {c: ground_truth['conversations'][c] for c in all_eval_ids}},
-                arch_ids)
-        except Exception:
-            continue
+arch_rows = []
+for arch in ARCH_NAMES:
+    # Load the style-specific gold annotations (run with profile-calibrated prompts)
+    style_anns, style_gold = load_annotations(GOLD_STYLE_VERSION, f'annotations_gold_{arch}.json')
+    if style_anns is None:
+        print(f'{arch}: no style-specific gold annotations found')
+        continue
 
-        matches = []
-        for cid, conv_data in arch_gt['conversations'].items():
-            hm = conv_data['key_moments']
-            llm = v5_gold.get(cid, [])
-            # Filter LLM annotations to only those matching archetype annotator moments
+    try:
+        arch_ids = load_annotator_archetype_ids(arch)
+        arch_gt = filter_ground_truth_by_archetype(
+            {'conversations': {c: ground_truth['conversations'][c] for c in all_eval_ids}},
+            arch_ids)
+    except Exception as e:
+        print(f'{arch}: could not load archetype GT: {e}')
+        continue
+
+    # Match style-specific LLM annotations against archetype-filtered ground truth
+    matches = []
+    for cid, conv_data in arch_gt['conversations'].items():
+        hm = conv_data['key_moments']
+        llm = style_anns.get(cid, [])
+        if style_gold:
             matches.extend(match_gold_direct(hm, llm))
+        else:
+            matches.extend(match_for_effectiveness(hm, llm, iou_threshold=IOU))
 
-        if matches:
-            eff = compute_effectiveness_metrics(matches)
-            arch_rows.append({
-                '': arch.title(),
-                'N': eff['total_matched'],
-                '3-Way Kappa': f"{eff['three_way_kappa']:.4f}",
-                'Binary Kappa': f"{eff['binary_kappa']:.4f}",
-            })
+    if matches:
+        eff = compute_effectiveness_metrics(matches)
+        # Human ceiling for this archetype
+        arch_ceil = compute_human_ceiling(arch_gt)
+        ceil_str = f"{arch_ceil['three_way_kappa']:.4f} ({arch_ceil['overlapping_pairs']} pairs)"
+        if arch_ceil['overlapping_pairs'] == 0:
+            ceil_str = 'N/A (single annotator)'
 
-    if arch_rows:
-        df_arch = pd.DataFrame(arch_rows).set_index('')
-        print('Gold Mode by Annotator Profile (combined dev + held-out)\\n')
-        df_arch
+        arch_rows.append({
+            '': arch.title(),
+            'N moments': eff['total_matched'],
+            'N convs': len([c for c in arch_gt['conversations']]),
+            '3-Way Kappa': f"{eff['three_way_kappa']:.4f}",
+            'Binary Kappa': f"{eff['binary_kappa']:.4f}",
+            'Human Ceiling (3W)': ceil_str,
+        })
+        print(f'{arch}: 3way={eff["three_way_kappa"]:.4f}, n={eff["total_matched"]}')
+
+if arch_rows:
+    df_arch = pd.DataFrame(arch_rows).set_index('')
+    print('\\nGold Mode by Annotator Profile (profile-calibrated prompts)\\n')
+    df_arch
 """))
 
     # ---- Full pipeline ----
