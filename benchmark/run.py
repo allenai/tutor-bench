@@ -6,6 +6,7 @@ All-batch architecture:
   Phase 3: Score per style (no composite aggregation)
 
 Usage:
+    python -m benchmark.run                              # auto-generated version
     python -m benchmark.run --version v1
     python -m benchmark.run --version v1 --tutor-profile anthropic
     python -m benchmark.run --version v1 --max-scenarios 10
@@ -342,7 +343,8 @@ def run_benchmark(version: str, config: dict):
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark AI tutor models")
-    parser.add_argument("--version", required=True, help="Benchmark version (e.g., v1)")
+    parser.add_argument("--version", default=None,
+                        help="Benchmark version (default: auto-generated from tutor profile + date)")
     parser.add_argument("--tutor-profile",
                         help="Single tutor profile (e.g. gemini, openai, anthropic)")
     parser.add_argument("--scenario-mode", choices=["detected", "random", "both"],
@@ -367,7 +369,21 @@ def main():
     overrides = {k: v for k, v in overrides.items() if v is not None}
 
     config = load_config(overrides)
-    run_benchmark(args.version, config)
+
+    if args.version:
+        version = args.version
+    else:
+        bm_version = config.get("version")
+        if bm_version:
+            version = bm_version
+        else:
+            import datetime
+            tutor_profile = config.get("tutor_profiles", ["anthropic"])[0]
+            date_str = datetime.date.today().strftime("%Y-%m-%d")
+            version = f"{tutor_profile}_{date_str}"
+            print(f"  Auto-generated version: {version}")
+
+    run_benchmark(version, config)
 
 
 if __name__ == "__main__":

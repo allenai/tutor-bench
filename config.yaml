@@ -180,6 +180,7 @@ retry:
 
 # Benchmark model config
 benchmark:
+  version: null                # null = auto-generate as {tutor_profile}_{date}
   scenarios:
     mode: detected                # detected | random | both
     max_scenarios: 0
