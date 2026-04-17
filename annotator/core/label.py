@@ -14,13 +14,14 @@ Usage:
 """
 
 import argparse
+import datetime
 import json
 from pathlib import Path
 
 from .client import (
     ModelClient, build_batch_entry, write_jsonl, run_batch, run_sync_entries,
 )
-from .config import get_phase_config
+from .config import get_phase_config, get_annotator_defaults, load_config
 from .storage import (
     load_annotator_result, save_annotator_result, annotator_result_exists,
     get_annotator_result_path,
@@ -154,11 +155,9 @@ def run_label(version: str, model: str, mode: str, phase_cfg: dict,
 
 
 def main():
-    phase_cfg = get_phase_config("label")
-
     parser = argparse.ArgumentParser(description="Pass 3: Label annotation effectiveness")
-    parser.add_argument("--version", required=True,
-                        help="Version to label (reads annotations.json from results/{version}/)")
+    parser.add_argument("--version", default=None,
+                        help="Version to label (reads annotations.json from results/{version}/). Auto-generates if not set.")
     parser.add_argument("--model", default=None,
                         help="Model name (overrides config)")
     parser.add_argument("--profile", default=None,
@@ -174,18 +173,39 @@ def main():
                         help="Match the annotations_{style}.json file from annotate --style")
     args = parser.parse_args()
 
-    if args.profile:
-        phase_cfg = get_phase_config("label", args.profile)
+    defaults = get_annotator_defaults()
+
+    # Resolve profile first (needed for version generation)
+    profile = args.profile or load_config().get("profile", "anthropic")
+    phase_cfg = get_phase_config("label", profile)
+
+    # Resolve version: CLI > config > auto-generate
+    if args.version:
+        version = args.version
+    elif defaults.get("version"):
+        version = defaults["version"]
+    else:
+        date_str = datetime.date.today().strftime("%Y-%m-%d")
+        version = f"{profile}_{date_str}"
+        print(f"  Auto-generated version: {version}")
+
+    # Resolve style: CLI > config > None
+    style = args.annotator_style
+    if style is None:
+        cfg_style = defaults.get("style")
+        if cfg_style is not None:
+            style = cfg_style
+
     model = args.model or phase_cfg["model"]
     mode = args.mode or phase_cfg.get("mode", "batch")
 
-    output = run_label(version=args.version, model=model, mode=mode,
+    output = run_label(version=version, model=model, mode=mode,
                        phase_cfg=phase_cfg, gold=args.gold,
-                       binary=args.binary, annotator_style=args.annotator_style)
+                       binary=args.binary, annotator_style=style)
     if output:
         mode_hint = " --mode annotations" if args.gold else ""
-        style_flag = f" --annotator-style {args.annotator_style}" if args.annotator_style else ""
-        print(f"\nNext: python -m pipeline.eval.eval --version {args.version}{mode_hint}{style_flag}")
+        style_flag = f" --annotator-style {style}" if style else ""
+        print(f"\nNext: python -m annotator.eval.eval --version {version}{mode_hint}{style_flag}")
 
 
 if __name__ == "__main__":

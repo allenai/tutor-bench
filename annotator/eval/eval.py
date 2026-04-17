@@ -888,15 +888,28 @@ def main():
 
     # --- Normal eval mode ---
     if not args.version:
-        parser.error("--version is required (unless using --compare)")
+        from annotator.core.config import get_annotator_defaults
+        defaults = get_annotator_defaults()
+        version = defaults.get("version")
+        if not version:
+            parser.error("--version is required (unless using --compare, or set annotator.version in config.yaml)")
+    else:
+        version = args.version
 
-    version = args.version
+    # Resolve style from config if not on CLI
+    style = args.annotator_style
+    if style is None:
+        from annotator.core.config import get_annotator_defaults
+        defaults = get_annotator_defaults()
+        cfg_style = defaults.get("style")
+        if cfg_style is not None:
+            style = cfg_style
 
     # Load ground truth (with optional archetype filtering)
-    ground_truth = load_ground_truth(annotator_style=args.annotator_style)
+    ground_truth = load_ground_truth(annotator_style=style)
 
-    if args.annotator_style:
-        print(f"Filtered ground truth to '{args.annotator_style}' annotators")
+    if style:
+        print(f"Filtered ground truth to '{style}' annotators")
         print(f"  Conversations with matching annotations: "
               f"{len(ground_truth['conversations'])}")
 
@@ -912,7 +925,7 @@ def main():
             return
         print(f"Loaded detections for version {version}")
     else:
-        ann_filename = resolve_annotations_filename(version, args.mode, args.annotator_style)
+        ann_filename = resolve_annotations_filename(version, args.mode, style)
         annotations_by_conv, is_gold = load_annotations(version, ann_filename)
         if annotations_by_conv is None:
             print(f"ERROR: {ann_filename} not found for version {version}")
@@ -1024,7 +1037,7 @@ def main():
     print_scorecard(output)
 
     compact_output = strip_per_conversation(output)
-    style_suffix = f"_{args.annotator_style}" if args.annotator_style else ""
+    style_suffix = f"_{style}" if style else ""
     eval_filename = f"eval_{args.mode}{style_suffix}.json"
     save_annotator_result(version, eval_filename, compact_output)
     print(f"\nSaved to: {eval_filename} (version: {version})")

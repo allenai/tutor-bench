@@ -14,9 +14,10 @@ Usage:
 """
 
 import argparse
+import datetime
 from pathlib import Path
 
-from .core.config import get_phase_config
+from .core.config import get_phase_config, get_annotator_defaults, load_config
 from .core.detect import run_detect
 from .core.annotate import run_annotate
 from .core.label import run_label
@@ -27,8 +28,8 @@ PROMPTS_DIR = Path(__file__).parent.parent / "prompts" / "annotator"
 def main():
     parser = argparse.ArgumentParser(description="Run full annotation pipeline")
 
-    parser.add_argument("--version", required=True,
-                        help="Results version directory (e.g. v1, v3_gemini)")
+    parser.add_argument("--version", default=None,
+                        help="Results version directory (e.g. v1, v3_gemini). Auto-generates if not set.")
     parser.add_argument("--model", default=None,
                         help="Override model for all phases")
     parser.add_argument("--profile", default=None,
@@ -58,20 +59,44 @@ def main():
     parser.add_argument("--context", type=int, default=None,
                         help="Context window for annotation excerpts")
     args = parser.parse_args()
-    prompt_version = args.prompt_version or args.version
+
+    defaults = get_annotator_defaults()
+
+    # Resolve profile first (needed for version generation)
+    profile = args.profile or load_config().get("profile", "anthropic")
+
+    # Resolve version: CLI > config > auto-generate
+    if args.version:
+        version = args.version
+    elif defaults.get("version"):
+        version = defaults["version"]
+    else:
+        date_str = datetime.date.today().strftime("%Y-%m-%d")
+        version = f"{profile}_{date_str}"
+        print(f"  Auto-generated version: {version}")
+
+    # Resolve style: CLI > config > None
+    style = args.style
+    if style is None:
+        cfg_style = defaults.get("style")
+        if cfg_style is not None:
+            style = cfg_style
+
+    # Resolve prompt_version: CLI > config > version
+    prompt_version = args.prompt_version or defaults.get("prompt_version") or version
 
     if args.gold:
         args.skip_detect = True
 
-    # When --style is set, override prompts to per-style profiles (if they exist)
+    # When style is set, override prompts to per-style profiles (if they exist)
     annotation_prompt_version = prompt_version
     detection_prompt_version = prompt_version
-    if args.style:
-        annotation_prompt_version = f"profiles/{args.style}"
+    if style:
+        annotation_prompt_version = f"profiles/{style}"
         # Use per-style detection prompts if p1/ dir exists for this style
-        style_p1_dir = PROMPTS_DIR / "profiles" / args.style / "p1"
+        style_p1_dir = PROMPTS_DIR / "profiles" / style / "p1"
         if style_p1_dir.exists():
-            detection_prompt_version = f"profiles/{args.style}"
+            detection_prompt_version = f"profiles/{style}"
 
     # --- Pass 1: Detect ---
     detections_data = None
@@ -79,9 +104,9 @@ def main():
         print("=" * 60)
         print("  PASS 1: Detection")
         print("=" * 60)
-        detect_cfg = get_phase_config("detect", args.profile)
+        detect_cfg = get_phase_config("detect", profile)
         detect_output = run_detect(
-            version=args.version,
+            version=version,
             model=args.model or detect_cfg["model"],
             mode=args.mode or detect_cfg.get("mode", "batch"),
             prompt_version=detection_prompt_version,
@@ -98,11 +123,11 @@ def main():
         print("\n" + "=" * 60)
         print("  PASS 2: Annotation")
         print("=" * 60)
-        annotate_cfg = get_phase_config("annotate", args.profile)
+        annotate_cfg = get_phase_config("annotate", profile)
         context_window = (args.context if args.context is not None
                           else annotate_cfg.get("context_window", 20))
         annotations_data = run_annotate(
-            version=args.version,
+            version=version,
             model=args.model or annotate_cfg["model"],
             mode=args.mode or annotate_cfg.get("mode", "batch"),
             prompt_version=annotation_prompt_version,
@@ -111,7 +136,7 @@ def main():
             dialogue_only=args.dialogue_only,
             context_window=context_window,
             gold=args.gold,
-            annotator_style=args.style,
+            annotator_style=style,
             detections_by_conv=detections_data,
         )
         if annotations_data is None:
@@ -122,21 +147,21 @@ def main():
     print("\n" + "=" * 60)
     print("  PASS 3: Labeling")
     print("=" * 60)
-    label_cfg = get_phase_config("label", args.profile)
+    label_cfg = get_phase_config("label", profile)
     run_label(
-        version=args.version,
+        version=version,
         model=args.model or label_cfg["model"],
         mode=args.mode or label_cfg.get("mode", "batch"),
         phase_cfg=label_cfg,
         gold=args.gold,
-        annotator_style=args.style,
+        annotator_style=style,
         annotations_data=annotations_data,
     )
 
     print("\n" + "=" * 60)
     print("  Pipeline complete!")
-    style_flag = f" --annotator-style {args.style}" if args.style else ""
-    print(f"  Next: python -m annotator.eval.eval --version {args.version}{style_flag}")
+    style_flag = f" --annotator-style {style}" if style else ""
+    print(f"  Next: python -m annotator.eval.eval --version {version}{style_flag}")
     print("=" * 60)
 
 

@@ -11,13 +11,14 @@ Usage:
 """
 
 import argparse
+import datetime
 import json
 from pathlib import Path
 
 from .client import (
     ModelClient, build_batch_entry, write_jsonl, run_batch, run_sync_entries,
 )
-from .config import get_phase_config
+from .config import get_phase_config, get_annotator_defaults, load_config
 from .storage import load_all_transcripts, save_annotator_result, get_annotator_result_path
 from .utils import format_transcript, TRANSCRIPTS_DIR, RESULTS_DIR
 
@@ -188,11 +189,9 @@ def run_detect(version: str, model: str, mode: str, prompt_version: str,
 
 
 def main():
-    phase_cfg = get_phase_config("detect")
-
     parser = argparse.ArgumentParser(description="Pass 1: Key moment detection")
-    parser.add_argument("--version", required=True,
-                        help="Prompt version (e.g. v1, v2)")
+    parser.add_argument("--version", default=None,
+                        help="Results version (e.g. v1, v2). Auto-generates if not set.")
     parser.add_argument("--model", default=None,
                         help="Model name (overrides config)")
     parser.add_argument("--profile", default=None,
@@ -213,23 +212,46 @@ def main():
                         help="Use per-style detection prompts from profiles/{style}/p1/")
     args = parser.parse_args()
 
-    if args.profile:
-        phase_cfg = get_phase_config("detect", args.profile)
+    defaults = get_annotator_defaults()
+
+    # Resolve profile first (needed for version generation)
+    profile = args.profile or load_config().get("profile", "anthropic")
+    phase_cfg = get_phase_config("detect", profile)
+
+    # Resolve version: CLI > config > auto-generate
+    if args.version:
+        version = args.version
+    elif defaults.get("version"):
+        version = defaults["version"]
+    else:
+        date_str = datetime.date.today().strftime("%Y-%m-%d")
+        version = f"{profile}_{date_str}"
+        print(f"  Auto-generated version: {version}")
+
+    # Resolve style: CLI > config > None
+    style = args.style
+    if style is None:
+        cfg_style = defaults.get("style")
+        if cfg_style is not None:
+            style = cfg_style
+
     model = args.model or phase_cfg["model"]
     mode = args.mode or phase_cfg.get("mode", "batch")
-    prompt_version = args.prompt_version or args.version
 
-    # Override prompt version when --style is set and p1 prompts exist
-    if args.style and not args.prompt_version:
-        style_p1_dir = PROMPTS_DIR / "profiles" / args.style / "p1"
+    # Resolve prompt_version: CLI > config > version
+    prompt_version = args.prompt_version or defaults.get("prompt_version") or version
+
+    # Override prompt version when style is set and p1 prompts exist
+    if style and not args.prompt_version:
+        style_p1_dir = PROMPTS_DIR / "profiles" / style / "p1"
         if style_p1_dir.exists():
-            prompt_version = f"profiles/{args.style}"
+            prompt_version = f"profiles/{style}"
 
-    output = run_detect(version=args.version, model=model, mode=mode,
+    output = run_detect(version=version, model=model, mode=mode,
                         prompt_version=prompt_version, targets=args.target,
                         phase_cfg=phase_cfg, test=args.test,
                         dialogue_only=args.dialogue_only)
-    print(f"\nNext: python -m pipeline.core.annotate --version {args.version}")
+    print(f"\nNext: python -m annotator.core.annotate --version {version}")
 
 
 if __name__ == "__main__":

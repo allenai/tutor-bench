@@ -34,6 +34,12 @@ archetype_annotators:
   demanding:
     - Flick
 
+# Annotator pipeline defaults (override any of these with CLI flags)
+annotator:
+  prompt_version: v4           # prompt version for detection + annotation
+  style: null                  # null = no style. Set to generous/balanced/demanding
+  version: null                # null = auto-generate as {profile}_{date}
+
 profiles:
   gemini:
     tutor:

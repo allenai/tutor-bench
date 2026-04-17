@@ -82,3 +82,9 @@ def get_archetype_annotators(archetype: str | None = None) -> dict[str, set[str]
     if archetype is None:
         return mapping
     return mapping.get(archetype)
+
+
+def get_annotator_defaults() -> dict:
+    """Get annotator pipeline defaults from config."""
+    config = load_config()
+    return config.get("annotator", {})
