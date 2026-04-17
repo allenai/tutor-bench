@@ -4,7 +4,7 @@
 
 The labeller classifies annotation result text as effective/partial/ineffective. It has three problems:
 
-1. **Three divergent prompts.** `extract_ground_truth.py` has an inline prompt (result-only, outcome-ish criteria). `classify.txt` has a different prompt (situation+action+result, strategy-centric criteria). `classify_binary.txt` is a third variant. These produce labels on different scales, but we compare them as if they're equivalent.
+1. **Four divergent prompts.** `extract_ground_truth.py` and `refresh_ground_truth.py` each have an inline prompt (result-only, outcome-ish criteria). `classify.txt` has a different prompt (situation+action+result, strategy-centric criteria). `classify_binary.txt` is a fourth variant. These produce labels on different scales, but we compare them as if they're equivalent. Note: `refresh_ground_truth.py` is the script that produces the per-conversation ground truth files the pipeline actually reads; `extract_ground_truth.py` produces a legacy single-file format.
 
 2. **Ground truth labeller only receives result text.** The pipeline labeller (`classify.txt`) receives situation, action, and result. The ground truth labeller (`extract_ground_truth.py`) only receives result text. In ~4 cases, the action field contains positive signals (e.g., "these are all good strategies") that the result text contradicts — the ground truth labeller never sees this context.
 
@@ -65,11 +65,15 @@ Respond with ONLY one word: effective, partial, or ineffective
 
 ### Pipeline integration
 
-**`extract_ground_truth.py` changes:**
-- Delete the inline `CLASSIFICATION_PROMPT` (lines 21-31)
-- Load `classify_v2.txt` from `prompts/annotator/labeller/` via plain file read (no ModelClient dependency -- this script stays standalone)
-- Pass all four fields: annotation_type, situation, action, result text (all already available in the consolidated JSON annotation dicts)
+**`refresh_ground_truth.py` changes (primary -- produces per-conversation files the pipeline reads):**
+- Delete inline `CLASSIFICATION_PROMPT`, load `classify_v2.txt` from `prompts/annotator/labeller/`
+- Pass all four fields: annotation_type, situation, action, result text
 - Add `--labeller` CLI arg (default: `v2`). Output goes to `data/ground_truth_{labeller}/`
+- Keep using Anthropic batch API via `ModelClient`
+
+**`extract_ground_truth.py` changes (legacy single-file format):**
+- Delete inline `CLASSIFICATION_PROMPT`, load `classify_v2.txt` from `prompts/annotator/labeller/`
+- Pass all four fields
 - Keep using Gemini API directly via `google.genai`
 
 **`label.py` changes:**
@@ -79,7 +83,7 @@ Respond with ONLY one word: effective, partial, or ineffective
 
 **Ground truth versioning:**
 - `data/ground_truth/` renamed to `data/ground_truth_v1/` (current baseline, untouched)
-- `data/ground_truth_v2/` created by re-running `extract_ground_truth.py --labeller v2`
+- `data/ground_truth_v2/` created by re-running `refresh_ground_truth.py --labeller v2`
 - `config.yaml` `paths.ground_truth` updated to point at active version
 - Both directories gitignored (data dirs already are)
 
