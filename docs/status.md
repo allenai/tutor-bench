@@ -26,10 +26,10 @@ The 3-pass annotation pipeline is stable and validated:
 | v3_gemini | Gemini | Yes | Yes | Yes | Previous best |
 | v3_claude | Claude | Yes | Yes | Yes | Best recall (64.9%) |
 
-**Per-archetype annotator profiles** (final, all exceed human ceiling):
-- Generous (5 annotators, n=297): 3-way kappa 0.4061 (ceiling 0.3350)
-- Balanced (3 annotators, n=510): 3-way kappa 0.5364 (ceiling 0.5049)
-- Demanding (1 annotator, n=79): 3-way kappa 0.6283
+**Per-archetype annotator profiles** (labeller v2, ground_truth_v2):
+- Generous (5 annotators, n=705): 3-way kappa 0.3740 (ceiling 0.4081)
+- Balanced (3 annotators, n=1123): 3-way kappa 0.4574 (ceiling 0.2310)
+- Demanding (1 annotator, n=172): 3-way kappa 0.4810
 
 ### Benchmark Pipeline -- Redesigned, First Full Run In Progress
 
@@ -78,6 +78,33 @@ Gemini balanced results also regenerated in `annotator_profiles/balanced/`.
 ---
 
 ## Completed Work
+
+### 2026-04-17: Labeller V2 — Unified Prompt + Outcome-Anchored Criteria
+
+**Problem**: Found 4 divergent labeller prompts with different criteria and different inputs. Ground truth script (`refresh_ground_truth.py`) only passed result text; pipeline labeller (`classify.txt`) passed situation+action+result. The v1 labeller overused "partial" for anything with hedged language (~690/2115 = 32.6%), masking real disagreement.
+
+**Changes**:
+- New `classify_v2.txt` prompt: outcome-anchored criteria, all 4 fields (annotation_type, situation, action, result), explicit guidance that situation context is not evidence, specific partial signals
+- `refresh_ground_truth.py`, `extract_ground_truth.py`, `label.py` all load the shared prompt
+- Ground truth versioned: `data/ground_truth_v1/` (baseline), `data/ground_truth_v2/` (v2 labeller)
+
+**Ground truth label shifts (v1 -> v2)**:
+- Unchanged: 1838/2115 (86.9%)
+- Changed: 277/2115 (13.1%)
+- partial -> ineffective: 162, partial -> effective: 83 (v1 was inflating partial)
+- ineffective -> partial: 10, effective -> partial: 9 (the known misclassifications, mostly fixed)
+
+**Eval comparison (3-way kappa, v1 labeller -> v2 labeller)**:
+
+| Style | v1 Kappa | v1 Ceiling | v2 Kappa | v2 Ceiling | Notes |
+|-------|----------|------------|----------|------------|-------|
+| Balanced | 0.5364 | 0.5049 | 0.4574 | 0.2310 | Ceiling dropped — v1 was masking human disagreement |
+| Generous | 0.4061 | 0.3350 | 0.3740 | 0.4081 | Kappa slightly down, ceiling up |
+| Demanding | 0.6283 | -- | 0.4810 | -- | Dropped, small n=172 |
+
+**Interpretation**: The v2 labeller is more polarized — it resolves ambiguous assessments to effective/ineffective instead of defaulting to partial. This reveals real disagreement that v1 was hiding behind inflated partial counts. The balanced human ceiling dropped from 0.5049 to 0.2310 because different annotators' hedged narratives now resolve to different poles instead of all landing on partial. The AI kappa dropped correspondingly because it's being measured against a more discriminating ground truth.
+
+**Spec**: `docs/superpowers/specs/2026-04-17-labeller-v2-design.md`
 
 ### 2026-04-16: Qualitative Review + Prompt Fix + Full Regeneration
 
