@@ -38,7 +38,6 @@ Ported from archive_per_annotator/eval.py with multi-mode support.
 
 import argparse
 import copy
-import json
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -50,8 +49,6 @@ from ..core.storage import (
     load_annotator_result, save_annotator_result, annotator_result_exists,
     list_annotator_result_files,
 )
-
-ANNOTATOR_PROFILES_PATH = RESULTS_DIR / "annotator_profiles.json"
 
 EFFECTIVENESS_LABELS = ["effective", "partial", "ineffective"]
 BINARY_LABELS = ["right", "wrong"]
@@ -490,15 +487,18 @@ def compute_human_ceiling(ground_truth, ann_type_filter=None):
 # ===================================================================
 
 def load_annotator_archetype_ids(archetype: str) -> set[str]:
-    """Load the set of annotator IDs belonging to the given archetype."""
-    if not ANNOTATOR_PROFILES_PATH.exists():
-        raise FileNotFoundError(
-            f"{ANNOTATOR_PROFILES_PATH} not found. "
-            "Run: python -m pipeline.iteration.classify_annotators"
+    """Load the set of annotator IDs belonging to the given archetype.
+
+    Reads from archetype_annotators in config.yaml.
+    """
+    from ..core.config import get_archetype_annotators
+    result = get_archetype_annotators(archetype)
+    if result is None:
+        raise ValueError(
+            f"Unknown archetype '{archetype}'. "
+            f"Check archetype_annotators in config.yaml."
         )
-    with open(ANNOTATOR_PROFILES_PATH, "r", encoding="utf-8") as f:
-        profiles = json.load(f)
-    return set(profiles["archetypes"].get(archetype, []))
+    return result
 
 
 def filter_ground_truth_by_archetype(ground_truth: dict, archetype_ids: set[str]) -> dict:
