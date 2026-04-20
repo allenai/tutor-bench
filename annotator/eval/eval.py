@@ -41,6 +41,7 @@ import copy
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from ..core.config import get_valid_styles
 from ..core.utils import (
     compute_iou, merge_overlapping_ranges, RESULTS_DIR, load_ground_truth,
     EXAMPLE_CONV_IDS,
@@ -869,7 +870,7 @@ def main():
                         help="What to evaluate (default: full)")
     parser.add_argument("--compare", nargs="+", metavar="VERSION",
                         help="Compare eval results across versions (e.g. --compare v1 v2 v3)")
-    parser.add_argument("--annotator-style", "--style", choices=["generous", "balanced", "demanding"],
+    parser.add_argument("--annotator-style", "--style", choices=get_valid_styles(),
                         default=None, dest="annotator_style",
                         help="Evaluate against only this annotator archetype's ground truth")
     args = parser.parse_args()

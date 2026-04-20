@@ -18,7 +18,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from ..core.client import ModelClient
-from ..core.config import get_phase_config, load_config
+from ..core.config import get_phase_config, load_config, get_valid_styles
 from ..core.storage import load_annotator_result, save_annotator_result
 from ..core.utils import (
     compute_iou, merge_overlapping_ranges, load_transcripts, get_excerpt,
@@ -420,7 +420,7 @@ def main():
                         help="Prompt version to load (default: same as --version)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print the meta-prompt without calling the API")
-    parser.add_argument("--annotator-style", choices=["generous", "balanced", "demanding"],
+    parser.add_argument("--annotator-style", choices=get_valid_styles(),
                         default=None,
                         help="Filter ground truth to this annotator archetype and tune the "
                              "## Annotator Calibration section of the prompt")

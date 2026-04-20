@@ -21,7 +21,7 @@ from pathlib import Path
 from .client import (
     ModelClient, build_batch_entry, write_jsonl, run_batch, run_sync_entries,
 )
-from .config import get_phase_config, get_annotator_defaults
+from .config import get_phase_config, get_annotator_defaults, get_valid_styles
 from .storage import (
     load_annotator_result, save_annotator_result, annotator_result_exists,
     get_annotator_result_path,
@@ -173,7 +173,7 @@ def main():
                         help="Label gold truth annotations (annotations_gold.json)")
     parser.add_argument("--binary", action="store_true",
                         help="Binary labeling only (effective/ineffective, no partial)")
-    parser.add_argument("--annotator-style", "--style", choices=["generous", "balanced", "demanding"],
+    parser.add_argument("--annotator-style", "--style", choices=get_valid_styles(),
                         default=None, dest="annotator_style",
                         help="Match the annotations_{style}.json file from annotate --style")
     args = parser.parse_args()

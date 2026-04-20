@@ -18,14 +18,14 @@ from pathlib import Path
 from .client import (
     ModelClient, build_batch_entry, write_jsonl, run_batch, run_sync_entries,
 )
-from .config import get_phase_config
+from .config import get_phase_config, get_valid_styles, get_annotation_types
 from .storage import load_all_transcripts, save_annotator_result, get_annotator_result_path
 from .utils import format_transcript
 
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts" / "annotator"
 
-VALID_TARGETS = ["scaffolding", "rapport"]
-VALID_ANNOTATION_TYPES = {"scaffolding", "rapport"}
+VALID_TARGETS = get_annotation_types()
+VALID_ANNOTATION_TYPES = set(get_annotation_types())
 
 
 def load_conversations(limit: int = 0) -> list[dict]:
@@ -206,8 +206,8 @@ def main():
                         help="Config profile to use (overrides config.yaml default)")
     parser.add_argument("--mode", choices=["batch", "sync"], default=None,
                         help="Execution mode (overrides config)")
-    parser.add_argument("--target", nargs="+", choices=VALID_TARGETS,
-                        default=VALID_TARGETS,
+    parser.add_argument("--target", nargs="+", choices=get_annotation_types(),
+                        default=get_annotation_types(),
                         help="Annotation targets to detect")
     parser.add_argument("--test", type=int, default=0,
                         help="Test on N conversations (0 = all)")
@@ -215,7 +215,7 @@ def main():
                         help="Exclude non-dialogue turns (enrichments) from transcripts")
     parser.add_argument("--prompt-version", default=None,
                         help="Prompt version to use (defaults to --version)")
-    parser.add_argument("--style", choices=["generous", "balanced", "demanding"],
+    parser.add_argument("--style", choices=get_valid_styles(),
                         default=None,
                         help="Use per-style detection prompts from profiles/{style}/p1/")
     args = parser.parse_args()

@@ -23,7 +23,7 @@ from pathlib import Path
 from .client import (
     ModelClient, build_batch_entry, write_jsonl, run_batch, run_sync_entries,
 )
-from .config import get_phase_config
+from .config import get_phase_config, get_valid_styles, get_annotation_types
 from .storage import (
     load_all_transcripts, load_annotator_result, save_annotator_result,
     annotator_result_exists, get_annotator_result_path,
@@ -32,9 +32,9 @@ from .utils import format_excerpt, load_ground_truth
 
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts" / "annotator"
 
-VALID_TARGETS = ["scaffolding", "rapport"]
-VALID_ANNOTATION_TYPES = {"scaffolding", "rapport"}
-VALID_ANNOTATOR_STYLES = ["generous", "balanced", "demanding"]
+VALID_TARGETS = get_annotation_types()
+VALID_ANNOTATION_TYPES = set(get_annotation_types())
+VALID_ANNOTATOR_STYLES = get_valid_styles()
 
 
 def load_conversations_map() -> dict[str, dict]:

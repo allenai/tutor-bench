@@ -17,6 +17,7 @@ import argparse
 import json
 from collections import Counter, defaultdict
 
+from annotator.core.config import get_valid_styles, get_annotation_types
 from annotator.core.storage import (
     load_benchmark_result, save_benchmark_result, list_benchmark_result_files,
 )
@@ -29,7 +30,7 @@ def load_benchmark_data(version: str, profile: str) -> dict:
 
     # Load annotations per style
     style_annotations = {}
-    for style in ("generous", "balanced", "demanding"):
+    for style in get_valid_styles():
         ann_files = list_benchmark_result_files(version, "annotations", profile, style)
         if ann_files:
             style_annotations[style] = {}
@@ -154,12 +155,12 @@ def print_eval(result: dict):
 
     # Label distributions
     print(f"\n  Label Distributions:")
-    for style in ("generous", "balanced", "demanding"):
+    for style in get_valid_styles():
         if style not in result["label_distributions"]:
             continue
         style_data = result["label_distributions"][style]
         print(f"\n    {style.upper()}:")
-        for ann_type in ("scaffolding", "rapport"):
+        for ann_type in get_annotation_types():
             if ann_type not in style_data:
                 continue
             type_data = style_data[ann_type]
@@ -195,6 +196,7 @@ def compare_profiles(version: str, profiles: list[str]):
     print(f"  {'Profile':<20} {'Type':<14} {'Effective':<12} {'Partial':<12} {'Ineffective':<12}")
     print(f"  {'-' * 70}")
     for profile in profiles:
+        # Uses balanced as representative style for cross-model comparison
         dist = results[profile]["label_distributions"].get("balanced", {})
         for ann_type in ("scaffolding", "rapport"):
             if ann_type not in dist:

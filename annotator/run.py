@@ -17,7 +17,7 @@ import argparse
 import datetime
 from pathlib import Path
 
-from .core.config import get_phase_config
+from .core.config import get_phase_config, get_valid_styles, get_annotation_types
 from .core.detect import run_detect
 from .core.annotate import run_annotate
 from .core.label import run_label
@@ -38,8 +38,8 @@ def main():
                         help="Execution mode for all phases")
     parser.add_argument("--prompt-version", default=None,
                         help="Prompt version (defaults to --version)")
-    parser.add_argument("--target", nargs="+", choices=["scaffolding", "rapport"],
-                        default=["scaffolding", "rapport"],
+    parser.add_argument("--target", nargs="+", choices=get_annotation_types(),
+                        default=get_annotation_types(),
                         help="Annotation targets")
     parser.add_argument("--test", type=int, default=0,
                         help="Test on N conversations (0 = all)")
@@ -53,7 +53,7 @@ def main():
     parser.add_argument("--gold", action="store_true",
                         help="Use gold truth moments (skips detect automatically)")
 
-    parser.add_argument("--style", choices=["generous", "balanced", "demanding"],
+    parser.add_argument("--style", choices=get_valid_styles(),
                         default=None,
                         help="Annotator style: use per-style prompts for annotation and labeling")
     parser.add_argument("--context", type=int, default=None,

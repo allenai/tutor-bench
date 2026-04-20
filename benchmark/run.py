@@ -19,7 +19,7 @@ import yaml
 from pathlib import Path
 
 from annotator.core.client import ModelClient
-from annotator.core.config import get_phase_config
+from annotator.core.config import get_phase_config, get_annotation_types
 from annotator.core.detect import run_detect
 from annotator.core.storage import (
     save_benchmark_result, load_benchmark_result, list_benchmark_result_files,
@@ -332,7 +332,7 @@ def run_benchmark(version: str, config: dict):
 
             # Per-type means
             type_means = {}
-            for ann_type in ("scaffolding", "rapport"):
+            for ann_type in get_annotation_types():
                 vals = [s["scores"][ann_type] for s in style_scenario_scores if ann_type in s["scores"]]
                 type_means[ann_type] = sum(vals) / len(vals) if vals else 0.0
 

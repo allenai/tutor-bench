@@ -15,6 +15,7 @@ import argparse
 import json
 import html
 
+from annotator.core.config import get_valid_styles
 from annotator.core.storage import (
     load_transcript, load_benchmark_result,
     list_benchmark_result_files, get_benchmark_result_path,
@@ -38,7 +39,7 @@ def load_data(version: str, profile: str):
 
     # Load annotations for each style
     style_annotations = {}  # {style: {scenario_id: data}}
-    for style in ("generous", "balanced", "demanding"):
+    for style in get_valid_styles():
         ann_files = list_benchmark_result_files(version, "annotations", profile, style)
         if ann_files:
             style_annotations[style] = {}
