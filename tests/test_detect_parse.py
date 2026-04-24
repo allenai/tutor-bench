@@ -80,3 +80,45 @@ class TestParseDetectionResults:
         result = parse_detection_results(raw)
         assert result["conv1"]["usage"]["input_tokens"] == 300
         assert result["conv1"]["usage"]["output_tokens"] == 125
+
+
+class TestBuildDetectionEntriesWithScreenshots:
+    def test_includes_images_when_flag_set(self, local_storage, monkeypatch):
+        from annotator.core.storage import load_transcript
+        from annotator.core.detect import build_detection_entries
+
+        conv_id = "2024-t1_2024-s1_099bf759-abcd"
+        conv = load_transcript(conv_id)
+
+        # Stub prompt loader to return a predictable template
+        import annotator.core.detect as d
+        monkeypatch.setattr(d, "load_prompt", lambda v, t: "PROMPT: {transcript}")
+
+        entries = build_detection_entries(
+            [conv], targets=["scaffolding"], version="v5",
+            with_screenshots=True,
+        )
+        assert len(entries) == 1
+        # 4.000.jpg usable; 11.500.jpg filtered (eedi_ip=True)
+        assert entries[0]["request"]["images"] == [
+            "deidentified/screenshots/099bf759-abcd/4.000.jpg"
+        ]
+        # Text marker appears in the prompt. 4s falls inside turn 2 (starts at 3s).
+        prompt_text = entries[0]["request"]["contents"][0]["parts"][0]["text"]
+        assert "[SCREEN @ turn 2: image 1]" in prompt_text
+
+    def test_no_images_when_flag_off(self, local_storage, monkeypatch):
+        from annotator.core.storage import load_transcript
+        from annotator.core.detect import build_detection_entries
+
+        conv_id = "2024-t1_2024-s1_099bf759-abcd"
+        conv = load_transcript(conv_id)
+
+        import annotator.core.detect as d
+        monkeypatch.setattr(d, "load_prompt", lambda v, t: "PROMPT: {transcript}")
+
+        entries = build_detection_entries(
+            [conv], targets=["scaffolding"], version="v5",
+            with_screenshots=False,
+        )
+        assert "images" not in entries[0]["request"]

@@ -55,17 +55,27 @@ def load_prompt(version: str, target: str) -> str:
 
 
 def build_detection_entries(conversations: list[dict], targets: list[str],
-                            version: str, dialogue_only: bool = False) -> list[dict]:
-    """Build batch entries for detection.
+                            version: str, dialogue_only: bool = False,
+                            with_screenshots: bool = False) -> list[dict]:
+    """Build batch entries for detection."""
+    from .screenshots import load_anchored_screenshots
 
-    Ported from archive_per_annotator/pipeline/pass1_detect.py
-    """
     prompt_cache = {}
     entries = []
 
     for conv in conversations:
         conv_id = conv["conversation_id"]
-        transcript_text = format_transcript(conv, dialogue_only=dialogue_only)
+
+        screenshots = (
+            load_anchored_screenshots(conv_id, conv["turns"])
+            if with_screenshots else []
+        )
+        image_paths = [s["storage_path"] for s in screenshots]
+
+        transcript_text = format_transcript(
+            conv, dialogue_only=dialogue_only,
+            screenshots=screenshots if screenshots else None,
+        )
 
         for target in targets:
             if target not in prompt_cache:
@@ -73,16 +83,20 @@ def build_detection_entries(conversations: list[dict], targets: list[str],
 
             prompt = prompt_cache[target].replace("{transcript}", transcript_text)
             key = f"{conv_id}__{target}"
-            entries.append(build_batch_entry(key, prompt))
+            entries.append(build_batch_entry(
+                key, prompt, images=image_paths or None,
+            ))
 
     return entries
 
 
-def parse_detection_results(raw_entries: dict) -> dict[str, dict]:
+def parse_detection_results(raw_entries: dict,
+                            images_per_key: dict[str, int] | None = None) -> dict[str, dict]:
     """Parse batch results into detections per conversation.
 
     Ported from archive_per_annotator/pipeline/pass1_detect.py
     """
+    images_per_key = images_per_key or {}
     detections_by_conv = {}
     errors = []
 
@@ -97,7 +111,13 @@ def parse_detection_results(raw_entries: dict) -> dict[str, dict]:
             detections_by_conv[conv_id] = {
                 "detections": [],
                 "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+                "images_seen": 0,
             }
+        # accumulate max images seen for this conv across targets (same images per target)
+        detections_by_conv[conv_id]["images_seen"] = max(
+            detections_by_conv[conv_id]["images_seen"],
+            images_per_key.get(key, 0),
+        )
 
         if "error" in data:
             errors.append({"key": key, "error": data["error"]})
@@ -141,7 +161,8 @@ def parse_detection_results(raw_entries: dict) -> dict[str, dict]:
 
 def run_detect(version: str, model: str, mode: str, prompt_version: str,
                targets: list[str], phase_cfg: dict,
-               test: int = 0, dialogue_only: bool = False) -> dict:
+               test: int = 0, dialogue_only: bool = False,
+               with_screenshots: bool = False) -> dict:
     """Run detection pass. Returns the full output dict (with 'results' key)."""
     output_dir = get_annotator_result_path(version)
 
@@ -153,10 +174,16 @@ def run_detect(version: str, model: str, mode: str, prompt_version: str,
 
     client = ModelClient(model)
 
+    if with_screenshots:
+        from .client import validate_vision_support
+        validate_vision_support(model)
+        print("Screenshots: enabled -- vision model validated")
+
     enrichment_str = "dialogue only" if dialogue_only else "enriched (all turns)"
     print(f"Transcript mode: {enrichment_str}")
     entries = build_detection_entries(conversations, targets, prompt_version,
-                                     dialogue_only=dialogue_only)
+                                     dialogue_only=dialogue_only,
+                                     with_screenshots=with_screenshots)
     jsonl_path = str(output_dir / "detect_requests.jsonl")
     write_jsonl(entries, jsonl_path)
     print(f"Wrote {len(entries)} detection entries")
@@ -170,10 +197,20 @@ def run_detect(version: str, model: str, mode: str, prompt_version: str,
     else:
         print(f"Running {len(entries)} entries in sync mode...")
         raw = run_sync_entries(client, entries)
-    detections_by_conv = parse_detection_results(raw)
+
+    images_per_key = {
+        e["key"]: len(e["request"].get("images", []))
+        for e in entries
+    }
+    detections_by_conv = parse_detection_results(raw, images_per_key=images_per_key)
 
     total_dets = sum(len(d["detections"]) for d in detections_by_conv.values())
     avg = total_dets / len(detections_by_conv) if detections_by_conv else 0
+    total_images_sent = sum(images_per_key.values())
+    convs_with_images = sum(
+        1 for conv_data in detections_by_conv.values()
+        if conv_data.get("images_seen", 0) > 0
+    )
 
     output = {
         "pass": "detection",
@@ -185,6 +222,9 @@ def run_detect(version: str, model: str, mode: str, prompt_version: str,
         "total_conversations": len(detections_by_conv),
         "total_detections": total_dets,
         "avg_detections_per_conversation": round(avg, 1),
+        "with_screenshots": with_screenshots,
+        "convs_with_images": convs_with_images,
+        "total_images_sent": total_images_sent,
         "results": detections_by_conv,
     }
 
@@ -218,6 +258,9 @@ def main():
     parser.add_argument("--style", choices=get_valid_styles(),
                         default=None,
                         help="Use per-style detection prompts from profiles/{style}/p1/")
+    parser.add_argument("--with-screenshots", action="store_true",
+                        help="Include anchored screenshots in detection prompts. "
+                             "Requires a vision-capable model.")
     args = parser.parse_args()
 
     from .config import resolve_run_params
@@ -245,7 +288,8 @@ def main():
     output = run_detect(version=version, model=model, mode=mode,
                         prompt_version=prompt_version, targets=args.target,
                         phase_cfg=phase_cfg, test=args.test,
-                        dialogue_only=args.dialogue_only)
+                        dialogue_only=args.dialogue_only,
+                        with_screenshots=args.with_screenshots)
     print(f"\nNext: python -m annotator.core.annotate --version {version}")
 
 
