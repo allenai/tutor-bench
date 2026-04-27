@@ -36,6 +36,12 @@ Index of planned work and change log for the project. Plans live in this directo
 
 **Follow-ups**: migrate remaining prints incrementally; add `--log-level` CLI flag if useful; upload `run.log` to S3 results dir at end-of-run when `STORAGE_BACKEND=s3`.
 
+### 2026-04-24 — [Screenshot enrichment](2026-04-24-screenshot-enrichment.md) · [spec](specs/2026-04-24-screenshot-enrichment-design.md)
+
+**Goal**: Detection and annotation judge pedagogy from text alone, but transcripts often contain bare `[SCREEN UPDATE]` placeholders or narration-only enrichment turns. When a tutor says "look at this" or a student reacts to something visual, the pipeline is missing real context. Screenshots already exist on S3; wire them into the prompt path for the annotator pipeline only (benchmark stages stay text-only this iteration).
+**Status**: Implemented (PR #7, opt-in via `--with-screenshots`); not yet evaluated at scale.
+**Result**: New `annotator/core/screenshots.py` anchors each image to the latest transcript turn whose `start_seconds <= image timestamp`. `ModelClient.generate` and `build_batch_entry` accept `images=[storage_path, ...]` and resolve per-provider (base64 inline for local/Gemini, presigned URL for S3 + Anthropic/OpenAI). `[SCREEN @ turn N: image K]` markers in the rendered transcript drive content interleaving so each image lands next to its anchor turn instead of at the end. Default off everywhere -- existing runs are byte-for-byte unchanged. Anthropic prompt caching is enabled by default for annotation runs to amortize images that repeat across overlapping excerpt windows.
+
 ## Change log
 
 Reverse chronological. Stuff that shipped but didn't have a dedicated plan file, or non-obvious deltas worth recording.
