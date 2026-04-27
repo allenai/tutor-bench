@@ -28,6 +28,7 @@ from .config import get_phase_config, get_valid_styles, get_annotation_types
 from .storage import (
     load_all_transcripts, load_annotator_result, save_annotator_result,
     annotator_result_exists, get_annotator_result_path,
+    save_annotator_shard, list_annotator_shard_ids, load_annotator_shards,
 )
 from .utils import format_excerpt, load_ground_truth
 
@@ -268,8 +269,17 @@ def run_annotate(version: str, model: str, mode: str, prompt_version: str,
 
     If detections_by_conv is provided, uses it directly instead of reading
     from disk. This allows in-memory chaining from run_detect().
+
+    Resumable: per-conv results write to shards under
+    results/annotator/{version}/shards/{basename}/{conv_id}.json as they parse
+    (basename = output filename without .json, e.g. "annotations_generous").
+    A re-run with the same flags skips conv_ids that already have a shard.
     """
     output_dir = get_annotator_result_path(version)
+
+    style_suffix = f"_{annotator_style}" if annotator_style else ""
+    filename = f"annotations_gold{style_suffix}.json" if gold else f"annotations{style_suffix}.json"
+    output_basename = filename[:-5]  # strip .json -- this is the shard namespace
 
     conversations_map = load_conversations_map()
     logger.info("Loaded %d transcripts", len(conversations_map))
@@ -290,63 +300,82 @@ def run_annotate(version: str, model: str, mode: str, prompt_version: str,
     style_str = f" | Style: {annotator_style}" if annotator_style else ""
     logger.info("Model: %s | Mode: %s | Context: +/-%d turns%s", model, mode, context_window, style_str)
 
-    client = ModelClient(model)
-
-    if with_screenshots:
-        from .client import validate_vision_support
-        validate_vision_support(model)
-        logger.info("Screenshots: enabled -- vision model validated, caching ON")
-
-    enrichment_str = "dialogue only" if dialogue_only else "enriched (all turns)"
-    logger.info("Transcript mode: %s", enrichment_str)
-    entries = build_analysis_entries(
-        detections_by_conv, conversations_map, context_window, prompt_version,
-        dialogue_only=dialogue_only, annotator_style=annotator_style,
-        with_screenshots=with_screenshots,
-    )
-    jsonl_path = str(output_dir / "annotate_requests.jsonl")
-    write_jsonl(entries, jsonl_path)
-    logger.info("Wrote %d analysis entries", len(entries))
-
-    if mode == "batch":
-        poll_interval = phase_cfg["poll_interval"]
-        raw = run_batch(client, entries, display_name="annotate",
-                        poll_interval=poll_interval,
-                        thinking=phase_cfg.get("thinking", False),
-                        thinking_budget=phase_cfg.get("thinking_budget", 0),
-                        reasoning_effort=phase_cfg.get("reasoning_effort", ""),
-                        enable_cache=with_screenshots)
-    else:
-        logger.info("Running %d entries in sync mode...", len(entries))
-        raw = run_sync_entries(client, entries)
-    results = parse_and_merge(raw, detections_by_conv)
-
-    images_per_key = {
-        e["key"]: len(e["request"].get("images", []))
-        for e in entries
+    existing_ids = set(list_annotator_shard_ids(version, output_basename))
+    detections_to_process = {
+        cid: d for cid, d in detections_by_conv.items() if cid not in existing_ids
     }
-    for conv_id, conv_result in results.items():
-        for i, ann in enumerate(conv_result["annotations"]):
-            ann_type = ann.get("annotation_type", "scaffolding")
-            k = f"{conv_id}__{ann_type}__{i}"
-            ann["images_seen"] = images_per_key.get(k, 0)
-        conv_result["images_seen"] = sum(a.get("images_seen", 0) for a in conv_result["annotations"])
+    if existing_ids:
+        logger.info("Resuming version %s/%s: %d shards already on disk, %d to process",
+                    version, output_basename, len(existing_ids), len(detections_to_process))
 
-    total_images_sent = sum(images_per_key.values())
+    if detections_to_process:
+        client = ModelClient(model)
+
+        if with_screenshots:
+            from .client import validate_vision_support
+            validate_vision_support(model)
+            logger.info("Screenshots: enabled -- vision model validated, caching ON")
+
+        enrichment_str = "dialogue only" if dialogue_only else "enriched (all turns)"
+        logger.info("Transcript mode: %s", enrichment_str)
+        entries = build_analysis_entries(
+            detections_to_process, conversations_map, context_window, prompt_version,
+            dialogue_only=dialogue_only, annotator_style=annotator_style,
+            with_screenshots=with_screenshots,
+        )
+        jsonl_path = str(output_dir / "annotate_requests.jsonl")
+        write_jsonl(entries, jsonl_path)
+        logger.info("Wrote %d analysis entries", len(entries))
+
+        if mode == "batch":
+            poll_interval = phase_cfg["poll_interval"]
+            raw = run_batch(client, entries, display_name="annotate",
+                            poll_interval=poll_interval,
+                            thinking=phase_cfg.get("thinking", False),
+                            thinking_budget=phase_cfg.get("thinking_budget", 0),
+                            reasoning_effort=phase_cfg.get("reasoning_effort", ""),
+                            enable_cache=with_screenshots)
+        else:
+            logger.info("Running %d entries in sync mode...", len(entries))
+            raw = run_sync_entries(client, entries)
+
+        new_results = parse_and_merge(raw, detections_to_process)
+
+        # Stamp per-annotation and per-conv image counts before sharding.
+        images_per_key = {
+            e["key"]: len(e["request"].get("images", []))
+            for e in entries
+        }
+        for conv_id, conv_result in new_results.items():
+            for i, ann in enumerate(conv_result["annotations"]):
+                ann_type = ann.get("annotation_type", "scaffolding")
+                k = f"{conv_id}__{ann_type}__{i}"
+                ann["images_seen"] = images_per_key.get(k, 0)
+            conv_result["images_seen"] = sum(
+                a.get("images_seen", 0) for a in conv_result["annotations"]
+            )
+            save_annotator_shard(version, output_basename, conv_id, conv_result)
+            logger.debug("Shard saved: %s", conv_id)
+    else:
+        logger.info("All conversations already have shards -- nothing to send")
+
+    # Aggregate the monolithic JSON from the union of all shards.
+    results = load_annotator_shards(version, output_basename)
+
+    total_annotations = sum(len(r.get("annotations", [])) for r in results.values())
+    total_input = sum(r.get("usage", {}).get("input_tokens", 0) for r in results.values())
+    total_output = sum(r.get("usage", {}).get("output_tokens", 0) for r in results.values())
+    total_images_sent = sum(r.get("images_seen", 0) for r in results.values())
     convs_with_images = sum(1 for r in results.values() if r.get("images_seen", 0) > 0)
     annotations_with_images = sum(
         1 for r in results.values()
-        for a in r["annotations"]
+        for a in r.get("annotations", [])
         if a.get("images_seen", 0) > 0
     )
-
-    total_annotations = sum(len(r["annotations"]) for r in results.values())
-    total_input = sum(r["usage"]["input_tokens"] for r in results.values())
-    total_output = sum(r["usage"]["output_tokens"] for r in results.values())
     error_count = sum(
         1 for r in results.values()
         if any(a.get("action", "").startswith("[Analysis unavailable")
-               for a in r["annotations"])
+               for a in r.get("annotations", []))
     )
 
     output = {
@@ -372,11 +401,6 @@ def run_annotate(version: str, model: str, mode: str, prompt_version: str,
         },
     }
 
-    style_suffix = f"_{annotator_style}" if annotator_style else ""
-    if gold:
-        filename = f"annotations_gold{style_suffix}.json"
-    else:
-        filename = f"annotations{style_suffix}.json"
     save_annotator_result(version, filename, output)
 
     logger.info("Saved: %s (version: %s)", filename, version)
