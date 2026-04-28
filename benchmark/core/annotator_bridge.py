@@ -12,6 +12,7 @@ from annotator.core.client import (
 )
 from annotator.core.label import run_label
 from annotator.core.config import get_phase_config
+from annotator.core.screenshots import load_anchored_screenshots
 
 from .scenarios import Scenario
 from .exchange import Exchange
@@ -117,11 +118,17 @@ def prepare_bulk_entries(
     annotator_style: str,
     prompt_version: str,
     context_window: int = 20,
+    with_screenshots: bool = False,
 ) -> tuple[list[dict], dict, dict]:
     """Prepare annotation entries for many scenarios at once.
 
     Since different scenarios may share the same conv_id, we use
     scenario_id as a namespace prefix in batch keys to keep them unique.
+
+    When with_screenshots=True, loads anchored screenshots for each scenario
+    using the *original* scenario.conv_id (not the remapped scenario_id) and
+    passes them to build_analysis_entries via screenshots_by_conv keyed on
+    scenario_id so the function's iteration matches.
 
     Returns:
         entries: List of batch entries ready for run_batch/run_sync_entries
@@ -131,6 +138,9 @@ def prepare_bulk_entries(
     all_entries = []
     all_detections = {}
     all_conversations = {}
+    screenshots_by_conv: dict[str, list[dict]] | None = (
+        {} if with_screenshots else None
+    )
 
     for scenario in scenarios:
         exchange = exchanges.get(scenario.scenario_id)
@@ -152,10 +162,18 @@ def prepare_bulk_entries(
             scenario.scenario_id: detections[scenario.conv_id]
         }
 
+        if with_screenshots:
+            scenario_screenshots = load_anchored_screenshots(
+                scenario.conv_id, synth_conv["turns"],
+            )
+            screenshots_by_conv[scenario.scenario_id] = scenario_screenshots
+
         entries = build_analysis_entries(
             remapped_detections, remapped_conversations,
             context_window, prompt_version,
             annotator_style=annotator_style,
+            with_screenshots=with_screenshots,
+            screenshots_by_conv=screenshots_by_conv,
         )
 
         all_entries.extend(entries)

@@ -271,6 +271,7 @@ def run_benchmark(version: str, config: dict):
                 annotator_style=style,
                 prompt_version=prompt_version,
                 context_window=context_window,
+                with_screenshots=with_screenshots,
             )
             logger.info("[%s] %d annotation entries across %d scenarios",
                         style, len(entries), len(all_detections))
