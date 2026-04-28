@@ -237,8 +237,15 @@ def execute_and_parse_bulk(
     all_detections: dict,
     annotator_profile: str,
     mode: str = "batch",
+    existing_batch_id: str | None = None,
+    on_batch_created: callable = None,
 ) -> dict[str, dict]:
     """Execute bulk entries and parse results back to per-scenario annotations.
+
+    When mode == "batch", existing_batch_id resumes polling on a previously
+    submitted provider batch (skip submission). on_batch_created fires once
+    immediately after submission with the new batch id, so the orchestrator
+    can persist a sidecar before the poll loop starts.
 
     Returns: {scenario_id: parsed_results_dict}
     """
@@ -249,8 +256,12 @@ def execute_and_parse_bulk(
     client = ModelClient(annotate_cfg["model"])
 
     if mode == "batch":
-        raw = run_batch(client, entries, display_name="benchmark_annotate",
-                        poll_interval=annotate_cfg["poll_interval"])
+        raw = run_batch(
+            client, entries, display_name="benchmark_annotate",
+            poll_interval=annotate_cfg["poll_interval"],
+            existing_batch_id=existing_batch_id,
+            on_batch_created=on_batch_created,
+        )
     else:
         raw = run_sync_entries(client, entries)
 
