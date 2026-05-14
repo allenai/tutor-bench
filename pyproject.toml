@@ -73,8 +73,13 @@ all = ["tutor-bench[dev,eval,train]"]
 [project.scripts]
 tutor-bench = "tutor_bench.cli:main"
 
-[tool.setuptools]
-packages = ["tutor_bench"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tutor_bench*"]
+exclude = ["tests*", "scripts*", "experiments*"]
+
+[tool.setuptools.package-data]
+tutor_bench = ["prompts/*.md"]
 
 [tool.setuptools.dynamic]
 version = { attr = "tutor_bench.version.__version__" }
