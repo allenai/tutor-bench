@@ -1,0 +1,22 @@
+# Annotator runtime configuration — read by tutor_bench.annotator.config.load_annotator_config.
+#
+# Model selection and parameters below are inherited from the source repo's
+# defaults (ai2-synthetic-annotations @ 106dd78, profile=anthropic). REVIEW
+# before running real LLM calls — tutor-bench's project rules require that
+# model selection and parameters be confirmed explicitly.
+
+model:
+  provider: anthropic
+  model: claude-opus-4-6
+  max_tokens: 128000
+  thinking: true
+  thinking_budget: 16384
+  batch_poll_interval_sec: 60
+
+retry:
+  max_retries: 5
+  base_delay_sec: 5
+
+# Max seconds to poll a single batch job before failing. 86400 = 24h, matching
+# the upper bound of provider batch windows.
+batch_timeout_sec: 86400
