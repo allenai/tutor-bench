@@ -22,7 +22,7 @@ import json
 import logging
 import sys
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Repo-root on path so ``python scripts/annotate.py`` works without install.
@@ -127,7 +127,7 @@ def _write_outputs(out_dir: Path, result: PhaseResult, run_id: str) -> None:
 def main() -> int:
     args = _parse_args()
 
-    run_id = args.run_id or datetime.now(timezone.utc).strftime("detect-%Y%m%dT%H%M%SZ")
+    run_id = args.run_id or datetime.now(UTC).strftime("detect-%Y%m%dT%H%M%SZ")
     configure_logging(run_id=run_id)
 
     cfg = load_annotator_config()

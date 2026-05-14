@@ -170,7 +170,8 @@ def run_batch_anthropic(
 
     results: dict[str, dict[str, Any]] = {}
     for result in anthropic_client.messages.batches.results(message_batch.id):
-        key = id_to_key.get(result.custom_id, result.custom_id)
+        custom_id = result.custom_id or ""
+        key = id_to_key.get(custom_id, custom_id)
         if result.result.type == "succeeded":
             message = result.result.message
             text = ""

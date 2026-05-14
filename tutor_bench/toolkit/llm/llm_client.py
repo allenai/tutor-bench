@@ -201,8 +201,12 @@ def run_batch(
     """
     provider = client.provider
     if provider == "anthropic":
-        from tutor_bench.toolkit.llm.anthropic import run_batch_anthropic
+        from tutor_bench.toolkit.llm.anthropic import AnthropicClient, run_batch_anthropic
 
+        if not isinstance(client, AnthropicClient):
+            raise TypeError(
+                f"Expected AnthropicClient when provider='anthropic', got {type(client).__name__}"
+            )
         return run_batch_anthropic(
             client,
             list(entries),

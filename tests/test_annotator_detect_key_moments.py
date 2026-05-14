@@ -13,7 +13,6 @@ from tutor_bench.annotator.detect_key_moments import (
 from tutor_bench.toolkit.cost_tracker import TokenUsage
 from tutor_bench.toolkit.llm.llm_client import ModelResponse
 
-
 # ---------------------------------------------------------------------------
 # Parser tests — load-bearing detect.py:81-139 logic
 # ---------------------------------------------------------------------------

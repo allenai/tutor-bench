@@ -19,12 +19,13 @@ filter (re-add as an experiment if useful — see ``experiments/README.md``).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 
-def format_transcript(conversation: Mapping[str, object]) -> str:
+def format_transcript(conversation: Mapping[str, Any]) -> str:
     """Render ``conversation`` as ``Turn {n}. {ROLE}: {text}`` lines, one per turn."""
-    turns = conversation.get("turns") or []
+    turns: Sequence[Mapping[str, Any]] = conversation.get("turns") or []
     return "\n".join(
         f"Turn {turn['turn_number']}. {turn['role']}: {turn['text']}"
         for turn in turns
