@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from tutor_bench.toolkit.io_utils import load_jsonl, read_stems_file, resolve_path, save_jsonl
-from tutor_bench.toolkit.llm_utils import compute_cost_usd, extract_json_array, extract_json_object
+from tutor_bench.toolkit.llm.llm_utils import compute_cost_usd, extract_json_array, extract_json_object
 
 
 def test_read_stems_file_filters_comments_and_max(tmp_path: Path) -> None:
