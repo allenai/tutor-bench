@@ -1,0 +1,18 @@
+{
+  "conv_alpha__scaffolding": {
+    "text": "{\"detections\": [{\"annotation_type\": \"scaffolding\", \"turn_start\": 10, \"turn_end\": 12, \"brief_description\": \"Tutor breaks problem into parts.\", \"suggested_cut_turn\": 0}, {\"annotation_type\": \"scaffolding\", \"turn_start\": 18, \"turn_end\": 20, \"brief_description\": \"Tutor models think-aloud.\", \"suggested_cut_turn\": 999}]}",
+    "usage": {"input_tokens": 1200, "output_tokens": 80, "total_tokens": 1280}
+  },
+  "conv_alpha__rapport": {
+    "text": "{\"detections\": [{\"turn_start\": 5, \"turn_end\": 7, \"brief_description\": \"Tutor acknowledges frustration.\", \"suggested_cut_turn\": 4}]}",
+    "usage": {"input_tokens": 1180, "output_tokens": 40, "total_tokens": 1220}
+  },
+  "conv_beta__scaffolding": {
+    "text": "{\"detections\": []}",
+    "usage": {"input_tokens": 800, "output_tokens": 10, "total_tokens": 810}
+  },
+  "conv_beta__rapport": {
+    "text": "not valid json at all",
+    "usage": {"input_tokens": 760, "output_tokens": 5, "total_tokens": 765}
+  }
+}
