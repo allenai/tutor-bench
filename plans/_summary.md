@@ -233,7 +233,7 @@ Implemented an MMTutor-comparable baseline adapted to tutor-bench workflows:
 ## Plan 016: Annotator Migration Pilot — `detect_key_moments`
 
 **Plan:** `2026-05-14-annotator-pilot.md`
-**Status:** in_progress
+**Status:** code complete; Tier B real-LLM verification pending user-confirmed model + transcript data location
 **Source pin:** `ai2-synthetic-annotations` @ `106dd7808afe2bad0c6c9cbf90f48a5b10385138`
 
 **Goal:** Replace the mock `tutor_bench/annotator.py` with a real, library-quality annotator port from `ai2-synthetic-annotations`. The full annotator has three passes (detect key moments → annotate situation/action/result → label effectiveness); this pilot lands the shared toolkit foundation plus Pass 1 (`detect_key_moments`) only, so the architecture can be validated against real transcripts before committing to the same shape for Passes 2/3.
@@ -242,7 +242,12 @@ Implemented an MMTutor-comparable baseline adapted to tutor-bench workflows:
 
 **Out of scope (follow-up plans):** Pass 2 (annotate action/result), Pass 3 (label effectiveness), benchmark pipeline port, multi-provider SDKs (pilot is single-provider), prompt iteration (moves to `experiments/`), per-style profiles.
 
-**Result:** _pending_ — record Tier A parity outcome + Tier B usage/cost here on completion.
+**Result:**
+- 67 unit + parity tests green (`pytest -m "not slow"`); 2 skipped (the legacy mock-API test + the opt-in Anthropic smoke test that needs `ANTHROPIC_API_KEY`).
+- Ruff clean. Pyright clean for tutor-bench code; 4 SDK-not-installed warnings (upath, anthropic) resolve once the user runs `pip install -e .`.
+- Tier A parity: tutor-bench's `_parse_detection_results` produces output deep-equal to the source repo's `parse_detection_results` for the committed `tests/fixtures/annotator/raw_detections.json` fixture (snapshot at `expected_detections.json`).
+- Tier B (real Anthropic call on one transcript): **deferred**. Three things needed from the user before running it: confirmation that `model=claude-opus-4-6` + `thinking_budget=16384` + `max_tokens=128000` in `configs/annotator.yaml` are still the intended defaults (CLAUDE.md requires explicit confirmation); the path to `data/transcripts/` (gitignored, not yet pointed at); and a budget cap for the smoke run.
+- Mock `Annotator` class deleted; one test (`tests/test_grade_school_fixtures.py::test_load_with_api`) is `@pytest.mark.skip`'d until the Evaluator is also migrated. Tracked in `docs/follow_up_tasks.md`.
 
 ---
 
@@ -265,4 +270,4 @@ Implemented an MMTutor-comparable baseline adapted to tutor-bench workflows:
 | 013 | Reusable toolkit module extraction | Shared `tutor_bench/toolkit` primitives + script refactors + unit tests | **Core reusable base established for future plan velocity and consistency** |
 | 014 | Prompt registry + observability | Shared prompt builders + prompt IDs emitted in outputs | **Prompt provenance now explicit for reproducibility and reporting** |
 | 015 | MMTutor keyframe baseline (uncapped) | SSIM candidate generation + premium VLM pruning + 009/010/015 timeline + qualitative artifacts | **Implemented and ready for API-backed benchmark/inspection runs** |
-| 016 | Annotator migration pilot (`detect_key_moments`) | Port Pass 1 from `ai2-synthetic-annotations` to library quality; toolkit foundation + one-prompt-per-target + mock replacement | in_progress |
+| 016 | Annotator migration pilot (`detect_key_moments`) | Port Pass 1 from `ai2-synthetic-annotations` to library quality; toolkit foundation + one-prompt-per-target + mock replacement | **Code complete + Tier A parity green. Tier B (real-LLM) pending model + transcript-data confirmation.** |
