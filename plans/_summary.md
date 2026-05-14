@@ -230,6 +230,20 @@ Implemented an MMTutor-comparable baseline adapted to tutor-bench workflows:
 
 **Result:** End-to-end scripts and output contracts are implemented. Single-stem smoke-fast run completed with qualitative comparison outputs; 10-stem all-provider batch run launched and monitoring is in progress.
 
+## Plan 016: Annotator Migration Pilot — `detect_key_moments`
+
+**Plan:** `2026-05-14-annotator-pilot.md`
+**Status:** in_progress
+**Source pin:** `ai2-synthetic-annotations` @ `106dd7808afe2bad0c6c9cbf90f48a5b10385138`
+
+**Goal:** Replace the mock `tutor_bench/annotator.py` with a real, library-quality annotator port from `ai2-synthetic-annotations`. The full annotator has three passes (detect key moments → annotate situation/action/result → label effectiveness); this pilot lands the shared toolkit foundation plus Pass 1 (`detect_key_moments`) only, so the architecture can be validated against real transcripts before committing to the same shape for Passes 2/3.
+
+**Scope:** Toolkit additions (`toolkit/llm/`, `toolkit/cost_tracker.py`, `toolkit/logging_setup.py`), `tutor_bench/annotator/` subpackage with `detect_key_moments` + typed `AnnotatorConfig`, top-level `configs/annotator.yaml`, one canonical v5 prompt per target under `tutor_bench/prompts/`, mock removed day 1, `scripts/annotate.py` rewired.
+
+**Out of scope (follow-up plans):** Pass 2 (annotate action/result), Pass 3 (label effectiveness), benchmark pipeline port, multi-provider SDKs (pilot is single-provider), prompt iteration (moves to `experiments/`), per-style profiles.
+
+**Result:** _pending_ — record Tier A parity outcome + Tier B usage/cost here on completion.
+
 ---
 
 ## Chronology
@@ -251,3 +265,4 @@ Implemented an MMTutor-comparable baseline adapted to tutor-bench workflows:
 | 013 | Reusable toolkit module extraction | Shared `tutor_bench/toolkit` primitives + script refactors + unit tests | **Core reusable base established for future plan velocity and consistency** |
 | 014 | Prompt registry + observability | Shared prompt builders + prompt IDs emitted in outputs | **Prompt provenance now explicit for reproducibility and reporting** |
 | 015 | MMTutor keyframe baseline (uncapped) | SSIM candidate generation + premium VLM pruning + 009/010/015 timeline + qualitative artifacts | **Implemented and ready for API-backed benchmark/inspection runs** |
+| 016 | Annotator migration pilot (`detect_key_moments`) | Port Pass 1 from `ai2-synthetic-annotations` to library quality; toolkit foundation + one-prompt-per-target + mock replacement | in_progress |
