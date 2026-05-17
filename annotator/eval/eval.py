@@ -491,59 +491,86 @@ def compute_guardrails(annotations_by_conv):
 # 4. HUMAN CEILING -- Inter-annotator agreement context
 # ===================================================================
 
+def _cluster_moments_for_iaa(moments):
+    """Group moments from different annotators into IoU-based connected-component clusters.
+
+    Uses union-find so that transitively overlapping moments end up in the same unit.
+    Single-annotator moments are included but will be filtered by callers.
+    """
+    if not moments:
+        return []
+    n = len(moments)
+    parent = list(range(n))
+
+    def _find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if moments[i].get("annotator_id") == moments[j].get("annotator_id"):
+                continue
+            if compute_iou(
+                (moments[i]["turn_start"], moments[i]["turn_end"]),
+                (moments[j]["turn_start"], moments[j]["turn_end"]),
+            ) >= 0.3:
+                ri, rj = _find(i), _find(j)
+                if ri != rj:
+                    parent[ri] = rj
+
+    clusters = defaultdict(list)
+    for i in range(n):
+        clusters[_find(i)].append(moments[i])
+    return list(clusters.values())
+
+
 def compute_human_ceiling(ground_truth, ann_type_filter=None):
-    """Compute inter-annotator agreement (the ceiling we're trying to reach)."""
-    pairs_3way = []
-    pairs_binary = []
+    """Compute human-human Krippendorff's alpha (ordinal) as the agreement ceiling.
+
+    Builds a raters x units reliability matrix from IoU-clustered human moments,
+    where each unit is a cluster of overlapping moments from 2+ annotators.
+    ann_type_filter must be specified (scaffolding or rapport) — do not call
+    without it, as mixing annotation types is not meaningful.
+    """
+    units = []
 
     for conv_data in ground_truth.get("conversations", {}).values():
-        moments = conv_data["key_moments"]
-        by_type = defaultdict(list)
-        for m in moments:
-            by_type[m.get("annotation_type")].append(m)
-
-        for t, type_moments in by_type.items():
-            if ann_type_filter and t != ann_type_filter:
+        moments = [
+            m for m in conv_data.get("key_moments", [])
+            if m.get("strategy_label") in EFFECTIVENESS_LABELS
+            and (ann_type_filter is None or m.get("annotation_type") == ann_type_filter)
+        ]
+        for cluster in _cluster_moments_for_iaa(moments):
+            if len({m["annotator_id"] for m in cluster}) < 2:
                 continue
-            for i, m1 in enumerate(type_moments):
-                for j in range(i + 1, len(type_moments)):
-                    m2 = type_moments[j]
-                    if m1.get("annotator_id") == m2.get("annotator_id"):
-                        continue
-                    iou = compute_iou(
-                        (m1["turn_start"], m1["turn_end"]),
-                        (m2["turn_start"], m2["turn_end"])
-                    )
-                    if iou >= 0.3:
-                        l1 = m1.get("strategy_label", "unclear")
-                        l2 = m2.get("strategy_label", "unclear")
-                        if l1 in EFFECTIVENESS_LABELS and l2 in EFFECTIVENESS_LABELS:
-                            pairs_3way.append((l1, l2))
-                            b1, b2 = map_to_binary(l1), map_to_binary(l2)
-                            if b1 and b2:
-                                pairs_binary.append((b1, b2))
+            unit = {}
+            for m in cluster:
+                if m["annotator_id"] not in unit:
+                    unit[m["annotator_id"]] = _ORDINAL_CODE[m["strategy_label"]]
+            units.append(unit)
 
-    result = {"overlapping_pairs": len(pairs_3way)}
+    if not units:
+        return {"alpha": None, "n_units": 0, "n_raters": 0}
 
-    if pairs_3way:
-        h3, l3 = zip(*pairs_3way)
-        agree = sum(1 for a, b in pairs_3way if a == b)
-        result["three_way_agreement"] = round(agree / len(pairs_3way), 4)
-        result["three_way_kappa"] = cohens_kappa(list(h3), list(l3), EFFECTIVENESS_LABELS)
-    else:
-        result["three_way_agreement"] = 0
-        result["three_way_kappa"] = 0
+    all_annotators = sorted({a for u in units for a in u})
+    rater_idx = {a: i for i, a in enumerate(all_annotators)}
 
-    if pairs_binary:
-        hb, lb = zip(*pairs_binary)
-        agree = sum(1 for a, b in pairs_binary if a == b)
-        result["binary_agreement"] = round(agree / len(pairs_binary), 4)
-        result["binary_kappa"] = cohens_kappa(list(hb), list(lb), BINARY_LABELS)
-    else:
-        result["binary_agreement"] = 0
-        result["binary_kappa"] = 0
+    matrix = np.full((len(all_annotators), len(units)), np.nan)
+    for j, unit in enumerate(units):
+        for ann_id, code in unit.items():
+            matrix[rater_idx[ann_id], j] = code
 
-    return result
+    try:
+        alpha = round(
+            krippendorff.alpha(reliability_data=matrix, level_of_measurement="ordinal"),
+            4,
+        )
+    except ValueError:
+        alpha = 1.0
+
+    return {"alpha": alpha, "n_units": len(units), "n_raters": len(all_annotators)}
 
 
 # ===================================================================
@@ -681,15 +708,6 @@ def print_scorecard(output):
               f"{det['total_human_clusters']} clusters | "
               f"{det['novel_llm_annotations']} novel")
 
-    # --- Model-human agreement (new annotations mode) ---
-    iaa = output.get("iaa")
-    if iaa and iaa.get("alpha") is not None:
-        print(f"\n  MODEL-HUMAN AGREEMENT")
-        print(f"  {'-' * 40}")
-        print(f"  Krippendorff's α:    {iaa['alpha']:.4f}  (ordinal, LLM treated as one rater)")
-        print(f"  Units:               {iaa['n_units']}  matched moments")
-        print(f"  Raters:              {iaa['n_raters']}  ({iaa['n_raters'] - 1} human annotators + LLM)")
-
     # --- Effectiveness metrics ---
     eff = output.get("effectiveness")
     if eff and eff.get("binary_n", 0) > 0:
@@ -735,17 +753,6 @@ def print_scorecard(output):
         print(f"     Distribution:       {dist_str}")
         print(f"     Per conversation:   {guard['annotations_per_conversation']} annotations")
 
-    # --- Human ceiling (human-human agreement, for context) ---
-    ceiling = output.get("human_ceiling", {})
-    if ceiling.get("overlapping_pairs", 0) > 0:
-        print(f"\n  HUMAN-HUMAN AGREEMENT (ceiling context)")
-        print(f"  {'-' * 40}")
-        print(f"  Binary Kappa:          {ceiling.get('binary_kappa', 0):.4f}  "
-              f"(agreement: {ceiling.get('binary_agreement', 0):.1%})")
-        print(f"  3-Way Kappa:           {ceiling.get('three_way_kappa', 0):.4f}  "
-              f"(agreement: {ceiling.get('three_way_agreement', 0):.1%})")
-        print(f"  Overlapping pairs:     {ceiling['overlapping_pairs']}")
-
     # --- Per-type ---
     if output.get("by_type"):
         print(f"\n{'=' * 68}")
@@ -784,13 +791,14 @@ def print_scorecard(output):
                       f"(Krippendorff ordinal, {t_iaa.get('n_units', 0)} units, "
                       f"{n_r - 1} human raters + LLM)")
 
+            if t_ceil.get("alpha") is not None:
+                print(f"  Human-Human α:      {t_ceil['alpha']:.4f}  "
+                      f"(ceiling, {t_ceil.get('n_units', 0)} units, "
+                      f"{t_ceil.get('n_raters', 0)} raters)")
+
             if t_guard.get("total_annotations", 0) > 0:
                 print(f"  Effective Rate:     {t_guard.get('effective_rate', 0):.1%}  |  "
                       f"Invalid: {t_guard.get('invalid_labels', 0)}")
-
-            if t_ceil.get("overlapping_pairs", 0) > 0:
-                print(f"  Human-human α:      kappa={t_ceil.get('binary_kappa', 0):.4f}  "
-                      f"({t_ceil['overlapping_pairs']} pairs, ceiling)")
 
     print(f"\n{'=' * 68}")
 
@@ -938,13 +946,6 @@ def print_comparison(versions, evals, mode):
                 ev = latest.get("guardrails", {}).get(key, 0)
                 row += f" {fmt_delta(bv, ev, as_pct=not is_count):>{delta_w}}"
             print(row)
-
-    # Human ceiling (context, from first version)
-    ceiling = baseline.get("human_ceiling", {})
-    if ceiling.get("overlapping_pairs", 0) > 0:
-        print(f"\n  HUMAN CEILING (context)")
-        print(f"  Binary Kappa:  {ceiling.get('binary_kappa', 0):.4f}  |  "
-              f"3-Way Kappa:  {ceiling.get('three_way_kappa', 0):.4f}")
 
     print(f"\n{'=' * 68}")
 
@@ -1101,7 +1102,6 @@ def main():
     detection = None
     effectiveness = None
     guardrails = None
-    iaa = None
 
     if args.mode in ("full", "detections"):
         detection = compute_detection_metrics(human_moments_by_conv, llm_moments_by_conv)
@@ -1111,12 +1111,9 @@ def main():
         guardrails = compute_guardrails(annotations_by_conv)
 
     if args.mode == "annotations":
-        iaa = compute_krippendorff_alpha(all_matches)
         guardrails = compute_guardrails(annotations_by_conv)
 
-    ceiling = compute_human_ceiling(ground_truth)
-
-    # --- Per-type ---
+    # --- Per-type (all agreement metrics disaggregated by type) ---
     by_type = {}
     for ann_type in ANNOTATION_TYPES:
         type_result = {}
@@ -1132,7 +1129,7 @@ def main():
             type_result["effectiveness"] = compute_effectiveness_metrics(m_filtered)
             type_result["guardrails"] = compute_guardrails(a_filtered)
 
-        if iaa:
+        if args.mode == "annotations":
             m_filtered = filter_matches_by_type(all_matches, ann_type)
             a_filtered = filter_annotations_by_type(annotations_by_conv, ann_type)
             type_result["iaa"] = compute_krippendorff_alpha(m_filtered)
@@ -1153,11 +1150,8 @@ def main():
         output["detection"] = detection
     if effectiveness:
         output["effectiveness"] = effectiveness
-    if iaa:
-        output["iaa"] = iaa
     if guardrails:
         output["guardrails"] = guardrails
-    output["human_ceiling"] = ceiling
     output["by_type"] = by_type
 
     # Print and save
