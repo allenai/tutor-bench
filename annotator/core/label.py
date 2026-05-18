@@ -21,7 +21,7 @@ from pathlib import Path
 from .client import (
     ModelClient, build_batch_entry, write_jsonl, run_batch, run_sync_entries,
 )
-from .config import get_phase_config, get_annotator_defaults, get_valid_styles
+from .config import get_phase_config, get_annotator_defaults, get_valid_styles, get_annotation_types
 from .storage import (
     load_annotator_result, save_annotator_result, annotator_result_exists,
     get_annotator_result_path,
@@ -55,7 +55,6 @@ def run_label(version: str, model: str, mode: str, phase_cfg: dict,
     in_memory = annotations_data is not None
     profile_suffix = f"_{profile}" if profile else ""
     style_suffix = f"_{annotator_style}" if annotator_style else ""
-    from .config import get_annotation_types
     all_types = set(get_annotation_types())
     effective_targets = set(targets) if targets else all_types
     target_suffix = "" if effective_targets == all_types else "_" + "_".join(sorted(effective_targets))
