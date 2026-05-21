@@ -26,11 +26,11 @@ Below are examples of annotations made by teachers, each showing a key moment an
 
 Analyze the annotations above and identify:
 
-1. **Semantic patterns**: Read the action and result descriptions carefully -- what do the teachers mention or discuss in these? 
+1. **Semantic patterns**: Read the situation, action, and result descriptions carefully -- what do the teachers mention or discuss in these? 
 
 2. **Root causes**: For each key moment, consider: what factors, criteria, or context do teachers weigh? What types of evidence suggest a tutor's strategy to be effective or ineffective? What leads to a mixed and/or partial outcome among teachers? 
 
-3. **Proposed changes**: For each root cause, propose a SPECIFIC edit to the prompt. Fit proposed edits under the following prompt headings: "Your Task", "Ineffectiveness Considerations", and "Effectiveness Considerations". If changing text, quote the exact text to change and provide the replacement. 
+3. **Proposed changes**: For each root cause, propose a SPECIFIC edit to the prompt. Prompt sections that currently contain "..." are in particular need for additions. If changing text, quote the exact text to change and provide the replacement. 
 
 Respond in JSON:
 {{
