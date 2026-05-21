@@ -23,7 +23,9 @@ Output format — one JSON file per conversation:
         "situation": "<str>",
         "action": "<str>",
         "result": "<str>",
-        "strategy_label": "effective" | "partial" | "ineffective"
+        "strategy_label": "effective" | "partial" | "ineffective",
+        "cut_turn": <int>,          # optional — annotator-chosen benchmark cut point
+        "moment_id": "<str>"        # optional — links cut point to its parent moment
       },
       ...
     ]
@@ -80,7 +82,7 @@ def load_from_jsonl(path):
             for ta in record.get("turn_annotations", []):
                 if ta.get("turn_number_start") is None or ta.get("turn_number_end") is None:
                     continue
-                groups[conv_id].append({
+                entry = {
                     "annotator_id": annotator_id,
                     "turn_start": ta["turn_number_start"],
                     "turn_end": ta["turn_number_end"],
@@ -89,7 +91,12 @@ def load_from_jsonl(path):
                     "action": ta.get("action", ""),
                     "result": ta.get("result", ""),
                     "_timestamp": ta.get("annotation_timestamp", ""),
-                })
+                }
+                if "cut_turn" in ta:
+                    entry["cut_turn"] = ta["cut_turn"]
+                if "moment_id" in ta:
+                    entry["moment_id"] = ta["moment_id"]
+                groups[conv_id].append(entry)
 
     result = []
     for conv_id, annotations in sorted(groups.items()):
@@ -194,7 +201,7 @@ def classify_batch(items, labeller="v2"):
 
 
 def build_moment(ann, label):
-    return {
+    moment = {
         "turn_start": ann.get("turn_start"),
         "turn_end": ann.get("turn_end"),
         "annotation_type": ann.get("annotation_type", ""),
@@ -204,6 +211,11 @@ def build_moment(ann, label):
         "result": ann.get("result", ""),
         "strategy_label": label,
     }
+    if "cut_turn" in ann:
+        moment["cut_turn"] = ann["cut_turn"]
+    if "moment_id" in ann:
+        moment["moment_id"] = ann["moment_id"]
+    return moment
 
 
 def main():
