@@ -4,6 +4,12 @@ Index of planned work and change log for the project. Plans live in this directo
 
 ## Plans
 
+### 2026-05-22 — [Labeller headroom check](2026-05-22-labeller-headroom.md)
+
+**Goal**: Decide whether the per-type hybrid labeller (test_v2 kappa 0.782) has real headroom without commissioning new human ratings.
+**Status**: Done -- at ceiling, no change to canonical hybrid.
+**Result**: Three independent angles all confirm the per-type hybrid (v2 sc + v6 ra) sits at the practical ceiling on this data. (1) Error analysis on the 21 test_v2 hybrid errors found 81% are human-disagreement (16 A) or junk-annotation (1 C); only 4 errors are prompt-fixable. (2) Oracle ceiling over v2/v4/v5/v6 is 0.833 but unreachable -- the 4 Claude-designed prompts agree on 91.2% of items, so naive majority vote regresses to 0.750 and no simple router captures the +0.051 headroom. (3) v7 (Gemini-designed) underperformed both incumbents on train_v2 (sc 0.694 vs v2 0.778, ra 0.772 vs v6 0.808); v8 (gpt-5.4) blocked on OpenAI quota and not generated. v7's cross-architecture loss is evidence that the classifier (Claude Opus 4.6) -- not the prompt -- is the bottleneck. To move further: new human ratings with cross-reviewer overlap, a different classifier model held-constant on prompt, or upstream annotation-input fixes.
+
 ### 2026-05-20 — [Labeller validation](2026-05-20-labeller-validation.md)
 
 **Goal**: The EC2 validation app has been collecting human ratings on SAR annotations (~490 done ratings from 4 reviewers). This is ground truth for the labeller itself. Use it to measure the current labeller honestly, then iterate.
