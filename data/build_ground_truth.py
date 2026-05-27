@@ -144,7 +144,7 @@ def load_existing_labels():
     return existing
 
 
-def classify_batch(items, labeller="v2"):
+def classify_batch(items, labeller="hybrid"):
     """Run batch classification. `items` is list of dicts with keys:
     key, annotation_type, situation, action, result_text.
     Returns {key: label}.
@@ -232,7 +232,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true",
                         help="Show counts without submitting batch or writing files")
-    parser.add_argument("--labeller", default="v2",
+    parser.add_argument("--labeller", default="hybrid",
                         help="Labeller version. 'hybrid' routes per annotation_type using "
                              "config.yaml's annotator.labeller dict. Any other value loads "
                              "classify_{labeller}.txt as a single template. Determines output "
