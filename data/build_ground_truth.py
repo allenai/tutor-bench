@@ -24,6 +24,10 @@ Output format — one JSON file per conversation:
         "action": "<str>",
         "result": "<str>",
         "strategy_label": "effective" | "partial" | "ineffective",
+        "situation_label": {      # scaffolding moments only
+          "scaffolding": "yes" | "no" | "unclear" | "no_mention",
+          "rigor": "yes" | "no" | "unclear" | "no_mention"
+        },
         "cut_turn": <int>,          # optional — annotator-chosen benchmark cut point
         "moment_id": "<str>"        # optional — links cut point to its parent moment
       },
@@ -49,6 +53,11 @@ REPO_ROOT = DATA_DIR.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from annotator.core.label import JUNK_TEXTS, load_labeller_templates, pick_template
+from annotator.core.situate import (
+    JUNK_TEXTS as SIT_JUNK_TEXTS,
+    _load_prompt as _load_situation_prompt,
+    _parse_situation_label,
+)
 
 ANNOTATIONS_JSONL = DATA_DIR / "teacher_annotations" / "step_up_annotations.jsonl"
 GROUND_TRUTH_DIR = DATA_DIR / "ground_truth"
@@ -128,6 +137,17 @@ def moment_key(m):
     )
 
 
+def situation_key(m):
+    """Stable key for a situation label — same as moment_key but hashes situation text."""
+    return (
+        m.get("annotator_id", ""),
+        m.get("turn_start"),
+        m.get("turn_end"),
+        m.get("annotation_type", ""),
+        hashlib.md5((m.get("situation", "") or "").encode("utf-8")).hexdigest()[:12],
+    )
+
+
 def load_existing_labels():
     """Return {conv_id: {moment_key: strategy_label}} from current ground truth."""
     existing = {}
@@ -142,6 +162,71 @@ def load_existing_labels():
             if m.get("strategy_label")
         }
     return existing
+
+
+def load_existing_situation_labels():
+    """Return {conv_id: {situation_key: situation_label}} from current ground truth."""
+    existing = {}
+    if not GROUND_TRUTH_DIR.exists():
+        return existing
+    for f in GROUND_TRUTH_DIR.glob("*.json"):
+        with open(f, "r", encoding="utf-8") as fp:
+            d = json.load(fp)
+        existing[f.stem] = {
+            situation_key(m): m["situation_label"]
+            for m in d.get("key_moments", [])
+            if m.get("annotation_type") == "scaffolding" and m.get("situation_label")
+        }
+    return existing
+
+
+def situation_classify_batch(items):
+    """Batch classify situation appropriateness for scaffolding moments.
+
+    items: list of {key, situation}. Returns {key: {"scaffolding": ..., "rigor": ...}}.
+    """
+    if not items:
+        return {}
+    from annotator.core.client import ModelClient, run_batch, build_batch_entry
+    from annotator.core.config import get_phase_config
+
+    cfg = get_phase_config("label")
+    client = ModelClient(cfg["model"])
+    prompt_template = _load_situation_prompt()
+
+    entries = []
+    labels = {}
+    for it in items:
+        situation = it["situation"]
+        if (situation or "").strip().lower() in SIT_JUNK_TEXTS:
+            labels[it["key"]] = {"scaffolding": "unclear", "rigor": "unclear"}
+            continue
+        prompt = prompt_template.replace("{situation}", situation)
+        entries.append(build_batch_entry(key=it["key"], prompt_text=prompt, json_mode=True))
+
+    if not entries:
+        return labels
+
+    print(f"  Submitting {len(entries)} situation classifications to batch API "
+          f"(model={cfg['model']})...")
+    results = run_batch(
+        client, entries,
+        json_mode=True,
+        display_name="situation_classification",
+        poll_interval=cfg.get("poll_interval", 60),
+    )
+
+    for key, result in results.items():
+        if "error" in result:
+            print(f"  WARNING: error for {key}: {result['error']}")
+            labels[key] = {"scaffolding": "unclear", "rigor": "unclear"}
+            continue
+        sit_label, had_error = _parse_situation_label(result["text"])
+        if had_error:
+            print(f"  WARNING: could not parse situation label for {key}: {result['text'][:100]!r}")
+        labels[key] = sit_label
+
+    return labels
 
 
 def classify_batch(items, labeller="hybrid"):
@@ -255,16 +340,24 @@ def main():
     print(f"Loaded {len(conversations)} conversations")
 
     existing_labels = load_existing_labels()
-    print(f"Loaded existing labels for {len(existing_labels)} conversations")
+    print(f"Loaded existing strategy labels for {len(existing_labels)} conversations")
+    existing_situation_labels = load_existing_situation_labels()
+    sit_cache_total = sum(len(v) for v in existing_situation_labels.values())
+    print(f"Loaded existing situation labels for {len(existing_situation_labels)} conversations ({sit_cache_total} moments)")
 
-    # First pass: build per-conv plan (reuse vs classify)
+    # First pass: build per-conv plan (reuse vs classify) for both strategy and situation labels
     conv_plans = []
-    to_classify = []  # list of {key, result_text}
+    to_classify = []          # [{key, annotation_type, situation, action, result_text}]
+    to_situation_classify = []  # [{key, situation}] — scaffolding moments only
+    situation_plans = {}      # {conv_id: [s_item, ...]} parallel to plan
+
     for conv_id, conv_data in conversations:
         annotations = conv_data.get("annotations", [])
         known = existing_labels.get(conv_id, {})
+        known_s = existing_situation_labels.get(conv_id, {})
 
         plan = []
+        s_plan = []
         for idx, ann in enumerate(annotations):
             k = moment_key(ann)
             if k in known:
@@ -279,38 +372,71 @@ def main():
                     "result_text": ann.get("result", ""),
                 })
                 plan.append(("classify", ann, ckey))
+
+            if ann.get("annotation_type") == "scaffolding":
+                sk = situation_key(ann)
+                if sk in known_s:
+                    s_plan.append(("reuse", known_s[sk]))
+                else:
+                    skey = f"{conv_id}__{idx}__sit"
+                    to_situation_classify.append({"key": skey, "situation": ann.get("situation", "")})
+                    s_plan.append(("classify", skey))
+            else:
+                s_plan.append(None)
+
         conv_plans.append((conv_id, conv_data, plan))
+        situation_plans[conv_id] = s_plan
 
     total_moments = sum(len(p) for _, _, p in conv_plans)
     reused = sum(1 for _, _, p in conv_plans for kind, *_ in p if kind == "reuse")
     to_class = total_moments - reused
     new_convs = sum(1 for cid, _, _ in conv_plans if cid not in existing_labels)
+    sit_reused = sum(1 for sp in situation_plans.values() for item in sp if item and item[0] == "reuse")
 
     print(f"Plan: {len(conv_plans)} conversations, {total_moments} moments")
-    print(f"  Reuse existing labels: {reused}")
-    print(f"  Classify new moments: {to_class}")
-    print(f"  Brand new conversations: {new_convs}")
+    print(f"  Reuse existing strategy labels:   {reused}")
+    print(f"  Classify new strategy labels:     {to_class}")
+    print(f"  Reuse existing situation labels:  {sit_reused}")
+    print(f"  Classify new situation labels:    {len(to_situation_classify)}")
+    print(f"  Brand new conversations:          {new_convs}")
 
     if args.dry_run:
         print("\nDry run — exiting without classifying or writing.")
         return
 
-    # Second pass: batch classify
+    # Second pass: batch classify strategy labels + situation labels
     new_labels = classify_batch(to_classify, labeller=args.labeller)
+    new_situation_labels = situation_classify_batch(to_situation_classify)
+
+    def _resolve_situation(s_item):
+        if s_item is None:
+            return None
+        if s_item[0] == "reuse":
+            return s_item[1]
+        return new_situation_labels.get(s_item[1], {"scaffolding": "unclear", "rigor": "unclear"})
 
     # Third pass: write ground truth files
     GROUND_TRUTH_DIR.mkdir(parents=True, exist_ok=True)
     gt_written = 0
     for conv_id, conv_data, plan in conv_plans:
+        s_plan = situation_plans[conv_id]
         moments = []
-        for kind, ann, val in plan:
+        for (kind, ann, val), s_item in zip(plan, s_plan):
             if kind == "reuse":
                 if val != "unclear":
-                    moments.append(build_moment(ann, val))
+                    moment = build_moment(ann, val)
+                    sit = _resolve_situation(s_item)
+                    if sit is not None:
+                        moment["situation_label"] = sit
+                    moments.append(moment)
             else:
                 label = new_labels.get(val, "unclear")
                 if label != "unclear":
-                    moments.append(build_moment(ann, label))
+                    moment = build_moment(ann, label)
+                    sit = _resolve_situation(s_item)
+                    if sit is not None:
+                        moment["situation_label"] = sit
+                    moments.append(moment)
         out = {
             "conversation_id": conv_id,
             "num_turns": conv_data.get("num_turns", 0),

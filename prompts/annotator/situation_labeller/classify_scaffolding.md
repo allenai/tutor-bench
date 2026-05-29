@@ -11,9 +11,6 @@ Note that rigor and scaffolding are not mutually exclusive. Your response should
 The tutor should be pushing for rigor. 
 OUTPUT: {"scaffolding": "no_mention", "rigor": "yes"}
 
-This is a good place to push rigor. 
-OUTPUT: {"scaffolding": "no_mention", "rigor": "yes"} 
-
 Here is an appropriate time to push. 
 OUTPUT: {"scaffolding": "no_mention", "rigor": "yes"}  
 
@@ -32,7 +29,7 @@ OUTPUT: {"scaffolding": "no_mention", "rigor": "no_mention"}
 This is not a place for scaffolding or rigor. 
 OUTPUT: {"scaffolding": "no", "rigor": "no"}
 
-This is an appropriate place to build insert scaffolds. 
+This is an appropriate place to insert scaffolds. 
 OUTPUT: {"scaffolding": "yes", "rigor": "no_mention"}  
 
 # Your Task 
