@@ -24,17 +24,21 @@ from annotator.core.decompose import (
     _load_prompt as _load_decompose_prompt,
     _parse_decomposed,
 )
+from annotator.core.utils import load_split_ids
 
 GT_DIR = DATA_DIR / "ground_truth_hybrid"
 OUTPUT_PATH = DATA_DIR / "temp_decompose_output.json"
 
 
 def load_sample(n: int) -> list[dict]:
-    """Return first n moments (with conv_id + index) from sorted GT files."""
+    """Return first n moments from train-split conversations in sorted GT files."""
+    train_ids = load_split_ids("train")
     sample = []
     for f in sorted(GT_DIR.glob("*.json")):
         if len(sample) >= n:
             break
+        if f.stem not in train_ids:
+            continue
         d = json.load(open(f))
         conv_id = d["conversation_id"]
         for idx, m in enumerate(d["key_moments"]):
