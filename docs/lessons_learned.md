@@ -122,6 +122,19 @@ When a prompt has drifted through iteration, don't patch further. Go back to the
 
 ---
 
+## 2026-05-30: situation_label_agg: must exclude both=no_mention annotators before majority vote
+
+**What happened:** First implementation of `compute_situation_label_agg` remapped `no_mention` → `no` for all annotators, then took a majority vote. This inflated "neither" counts and turned clusters into "mixed" ties. The notebook's expected counts (both=14, scaffolding=589, rigor=338, neither=157) were not reproduced.
+
+**Why it happened:** The notebook's `build_binary_conf_counts` has an explicit step: *exclude annotators whose (scaf, rigor) tuple is both `no_mention`* before collecting votes. An annotator who left both slots as `no_mention` gave no signal — including them as a `(no, no)` vote biases the result toward "neither" and creates false ties.
+
+**Fix:** Three-step process matching the notebook exactly:
+1. Normalize `unclear`/`None` → `no_mention` (mirrors notebook's `_sit` helper)
+2. Skip annotators where both slots are `no_mention`
+3. Remap remaining `no_mention` → `no`, then majority-vote
+
+---
+
 ## 2026-04-28: Benchmark screenshots — wired, but data-pairing gap blocks validation
 
 **Original gap:** The annotator pipeline supports `--with-screenshots` (delivered 2026-04-24) but the benchmark — which reuses the annotator under the hood — never threaded the flag. Detection ran without images; tutor/student exchanges were text-only; annotation didn't see the screen even though the equivalent annotator-standalone run did.

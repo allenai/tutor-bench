@@ -132,6 +132,8 @@ def load_gold_moments(targets: list[str],
             ann_type = moment.get("annotation_type", "")
             if ann_type not in targets:
                 continue
+            if moment.get("strategy_label") == "unclear":
+                continue
             key = (moment["turn_start"], moment["turn_end"], ann_type)
             situation = moment.get("situation", "")
             if key not in best or len(situation) > len(best[key]["situation"]):

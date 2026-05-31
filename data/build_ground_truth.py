@@ -28,6 +28,7 @@ Output format — one JSON file per conversation:
           "scaffolding": "yes" | "no" | "unclear" | "no_mention",
           "rigor": "yes" | "no" | "unclear" | "no_mention"
         },
+        "situation_label_agg": "both" | "scaffolding" | "rigor" | "neither" | "mixed" | "unknown",  # scaffolding only; majority-voted across overlapping annotators (IoU >= 0.7), no_mention/unclear → no; "mixed" = tie, "unknown" = no annotator gave signal
         "cut_turn": <int>,          # optional — annotator-chosen benchmark cut point
         "moment_id": "<str>"        # optional — links cut point to its parent moment
       },
@@ -46,6 +47,7 @@ import argparse
 import hashlib
 import json
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent
@@ -58,6 +60,7 @@ from annotator.core.situate import (
     _load_prompt as _load_situation_prompt,
     _parse_situation_label,
 )
+from annotator.core.utils import compute_iou
 
 ANNOTATIONS_JSONL = DATA_DIR / "teacher_annotations" / "step_up_annotations.jsonl"
 GROUND_TRUTH_DIR = DATA_DIR / "ground_truth"
@@ -295,6 +298,109 @@ def classify_batch(items, labeller="hybrid"):
     return labels
 
 
+def _normalize_sit(val):
+    """Normalize unclear/None → no_mention (mirrors notebook _sit helper)."""
+    if val in ("unclear", None, ""):
+        return "no_mention"
+    return val  # "yes", "no", or "no_mention"
+
+
+def _cluster_by_iou(moments, threshold=0.7):
+    """Group moment indices into IoU-based connected-component clusters.
+
+    Same-annotator pairs are not directly linked (but may be transitively grouped).
+    Returns a list of lists of indices into `moments`.
+    """
+    n = len(moments)
+    if n == 0:
+        return []
+    parent = list(range(n))
+
+    def _find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if moments[i].get("annotator_id") == moments[j].get("annotator_id"):
+                continue
+            iou = compute_iou(
+                (moments[i]["turn_start"], moments[i]["turn_end"]),
+                (moments[j]["turn_start"], moments[j]["turn_end"]),
+            )
+            if iou >= threshold:
+                ri, rj = _find(i), _find(j)
+                if ri != rj:
+                    parent[ri] = rj
+
+    clusters = defaultdict(list)
+    for i in range(n):
+        clusters[_find(i)].append(i)
+    return list(clusters.values())
+
+
+def _majority_vote_tuple(tuples):
+    """Return the majority (scaf, rigor) tuple, or None on a tie."""
+    if not tuples:
+        return None
+    counts = Counter(tuples).most_common(2)
+    if len(counts) == 1 or counts[0][1] > counts[1][1]:
+        return counts[0][0]
+    return None  # tie
+
+
+_TUPLE_TO_AGG = {
+    ("yes", "yes"): "both",
+    ("yes", "no"):  "scaffolding",
+    ("no",  "yes"): "rigor",
+    ("no",  "no"):  "neither",
+}
+
+
+def compute_situation_label_agg(moments):
+    """Return {idx: agg_label} for each scaffolding moment in `moments`.
+
+    Groups overlapping scaffolding moments (IoU >= 0.7) into clusters,
+    majority-votes the (scaffolding, rigor) tuple (remapping no_mention/unclear → no),
+    and maps the winner to 'both'/'scaffolding'/'rigor'/'neither', 'mixed' for ties,
+    or 'unknown' when every annotator in the cluster had both slots as no_mention.
+    """
+    scaf_idxs = [i for i, m in enumerate(moments) if m.get("annotation_type") == "scaffolding"]
+    if not scaf_idxs:
+        return {}
+    scaf_moments = [moments[i] for i in scaf_idxs]
+    clusters = _cluster_by_iou(scaf_moments)
+
+    result = {}
+    for cluster in clusters:
+        seen_ann = set()
+        vote_tuples = []
+        for ci in cluster:
+            m = scaf_moments[ci]
+            ann_id = m.get("annotator_id", "")
+            if ann_id in seen_ann:
+                continue
+            seen_ann.add(ann_id)
+            sl = m.get("situation_label") or {}
+            scaf = _normalize_sit(sl.get("scaffolding"))
+            rigor = _normalize_sit(sl.get("rigor"))
+            if scaf == "no_mention" and rigor == "no_mention":
+                continue  # annotator gave no signal — exclude from vote
+            scaf = "no" if scaf == "no_mention" else scaf
+            rigor = "no" if rigor == "no_mention" else rigor
+            vote_tuples.append((scaf, rigor))
+        if not vote_tuples:
+            label = "unknown"
+        else:
+            winner = _majority_vote_tuple(vote_tuples)
+            label = "mixed" if winner is None else _TUPLE_TO_AGG.get(winner, "mixed")
+        for ci in cluster:
+            result[scaf_idxs[ci]] = label
+    return result
+
+
 def build_moment(ann, label):
     moment = {
         "turn_start": ann.get("turn_start"),
@@ -422,21 +528,16 @@ def main():
         s_plan = situation_plans[conv_id]
         moments = []
         for (kind, ann, val), s_item in zip(plan, s_plan):
-            if kind == "reuse":
-                if val != "unclear":
-                    moment = build_moment(ann, val)
-                    sit = _resolve_situation(s_item)
-                    if sit is not None:
-                        moment["situation_label"] = sit
-                    moments.append(moment)
-            else:
-                label = new_labels.get(val, "unclear")
-                if label != "unclear":
-                    moment = build_moment(ann, label)
-                    sit = _resolve_situation(s_item)
-                    if sit is not None:
-                        moment["situation_label"] = sit
-                    moments.append(moment)
+            label = val if kind == "reuse" else new_labels.get(val, "unclear")
+            moment = build_moment(ann, label)
+            sit = _resolve_situation(s_item)
+            if sit is not None:
+                moment["situation_label"] = sit
+            moments.append(moment)
+        agg = compute_situation_label_agg(moments)
+        for idx, agg_label in agg.items():
+            moments[idx]["situation_label_agg"] = agg_label
+
         out = {
             "conversation_id": conv_id,
             "num_turns": conv_data.get("num_turns", 0),

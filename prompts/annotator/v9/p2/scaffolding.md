@@ -64,28 +64,28 @@ At each moment, the tutor decides how much support to provide. Too much support 
 
 For the flagged moment, provide:
 - **Situation**: First, *evaluate why this is or isn't an appropriate time to push for rigor or scaffold*. Then, describe the student's state (e.g. stuck, confused, succeeding, coasting), and what pedagogical context makes this moment notable for scaffolding or rigor.  
-- **Action**: Describe what strategy or pedagogical approach the tutor used to push for rigor or scaffold. 
-- **Result**: Was the tutor's strategy effective, ineffective, or partially effective? Was the strategy too much, too little, or just the right amount of support? Why? Describe the impact on the student's learning and understanding. 
+- **Action**: What did the tutor do to push for rigor or scaffold? 
+- **Result**: Was the tutor's strategy effective, ineffective, or partially effective? Was the strategy too much, too little, or just the right amount of support? Why? Describe any changes in the student's learning and understanding, if applicable. 
 
-## Examples
+The following examples demonstrate the format and level of abstraction your output should have. 
 
 ### Example 1: 
 {
   "situation": "This is an appropriate place to scaffold because the student has been making similar mistakes on multiple questions.",
-  "action": "The tutor's strategy here is to ask guiding questions as the student works through a problem.",
-  "result": "The tutor's strategy is effective, as the student completes this problem correctly, and the student seems to be understanding the newly introduced concepts. "
+  "action": "The tutor asks guiding questions as the student works through a problem step-by-step.",
+  "result": "The tutor's strategy is effective, as the student was having some difficulty prior to this and eventually completes this problem correctly. The student also seems to be understanding the newly introduced concepts."
 }
 
 ### Example 2: 
 {
-  "situation": "This would be an appropriate time to push for rigor since the student is completing the task correctly and should be pushed to explain their strategy.",
-  "action": "The tutor shares a potential strategy the student could use to solve the next problem.",
-  "result": "The tutor is not effective here because they explained the strategy for the student instead of allowing the student the opportunity to explain."
+  "situation": "This would be an appropriate time to push for rigor, since the student is completing the task correctly.",
+  "action": "The tutor moves onto the next problem and starts off by providing a hint. The tutor shares a potential approach the student could use to solve the next problem.",
+  "result": "The tutor is not effective here because they offered too much support. The tutor gave away more than the student seems to need in this moment."
 }
 
 ## Detected Moment
 
-The following excerpt contains the flagged turn range, marked with >>> DETECTED MOMENT START <<< and >>> DETECTED MOMENT END <<<. The surrounding turns provide context.
+The following excerpt contains the flagged turn range, marked with >>> DETECTED MOMENT START <<< and >>> DETECTED MOMENT END <<<. The surrounding turns provide context. A teacher has already reviewed this excerpt and noted that this moment is likely an appropriate time to {suggestion}. 
 
 {excerpt}
 
