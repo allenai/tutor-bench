@@ -1,0 +1,4 @@
+# Benchmark prompt and config assets are sent to / parsed by models verbatim.
+# Pin them to LF so their bytes are identical on every platform and checkout.
+tutor_bench/benchmark/prompts/** text eol=lf
+tutor_bench/benchmark/default_config.yaml text eol=lf

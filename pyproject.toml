@@ -31,6 +31,12 @@ dependencies = [
     "rich>=13.0.0",
     "typer>=0.9.0",
     "jinja2>=3.1.0",
+    "anthropic>=0.39.0",
+    "openai>=1.30.0",
+    "google-genai>=0.3.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "boto3>=1.34.0",
 ]
 dynamic = ["version"]
 
@@ -49,6 +55,7 @@ dev = [
     "ruff>=0.0.280",
     "pyright>=1.1.0",
     "pre-commit>=3.3.3",
+    "moto[s3]>=5.0.0",
 ]
 eval = [
     "scipy>=1.11.0",
@@ -70,7 +77,19 @@ all = ["tutor-bench[dev,eval,train]"]
 tutor-bench = "tutor_bench.cli:main"
 
 [tool.setuptools]
-packages = ["tutor_bench"]
+packages = ["tutor_bench", "tutor_bench.benchmark"]
+
+[tool.setuptools.package-data]
+"tutor_bench.benchmark" = [
+    "default_config.yaml",
+    "prompts/tutor/*.txt",
+    "prompts/student/*.txt",
+    "prompts/student/dimensions/*.txt",
+    "prompts/student/trait_generator/*.txt",
+    "prompts/scorer/annotate/*.md",
+    "prompts/scorer/decompose/*.md",
+    "prompts/scorer/structure/*.md",
+]
 
 [tool.setuptools.dynamic]
 version = { attr = "tutor_bench.version.__version__" }
