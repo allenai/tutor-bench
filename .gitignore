@@ -42,3 +42,8 @@ data/
 output/
 plans/*
 !plans/_summary.md
+
+# secrets / local env
+.env
+.env.*
+!.env.example

@@ -230,6 +230,26 @@ Implemented an MMTutor-comparable baseline adapted to tutor-bench workflows:
 
 **Result:** End-to-end scripts and output contracts are implemented. Single-stem smoke-fast run completed with qualitative comparison outputs; 10-stem all-provider batch run launched and monitoring is in progress.
 
+## Plan 016: Benchmark Port — rebuild the tutoring benchmark cleanly in tutor-bench
+
+**Plan/Spec:** `016_benchmark_port_design.md`
+**Status:** design (spec) — not yet implemented
+
+Port the tutoring **replay benchmark** (cut a real transcript at a decisive moment → model tutor
+continues vs. a simulated student → calibrated LLM judge scores scaffolding & rigor) from the old
+`Insource-Services/ai2-synthetic-annotations` repo (the `tutorsim` package) into this repo, cleanly
+and tutor-bench-native, while emitting **byte-identical on-disk artifacts** to the shipped Insource
+benchmark.
+
+Dual anchor: outputs = Insource byte-for-byte; organization/naming = clean. Approach C (hybrid):
+cohesive `tutor_bench/benchmark/` subpackage, reuse `toolkit/` where it can't perturb bytes, replace
+the mock `Annotator`/`Evaluator` stubs, apply Kyle's terminology (LM step = "scoring"/"judge", not
+"annotation"; `Annotation`→`Judgment`; frozen wire keys like `annotation_type` preserved as a
+released contract). Offline only — live 520 reproduction explicitly deferred. Phased: foundations →
+scoring → rollout → orchestration/reporting → human baseline + docs.
+
+**Result:** TBD (design stage).
+
 ---
 
 ## Chronology
@@ -251,3 +271,4 @@ Implemented an MMTutor-comparable baseline adapted to tutor-bench workflows:
 | 013 | Reusable toolkit module extraction | Shared `tutor_bench/toolkit` primitives + script refactors + unit tests | **Core reusable base established for future plan velocity and consistency** |
 | 014 | Prompt registry + observability | Shared prompt builders + prompt IDs emitted in outputs | **Prompt provenance now explicit for reproducibility and reporting** |
 | 015 | MMTutor keyframe baseline (uncapped) | SSIM candidate generation + premium VLM pruning + 009/010/015 timeline + qualitative artifacts | **Implemented and ready for API-backed benchmark/inspection runs** |
+| 016 | Benchmark port (clean rebuild in tutor-bench) | Cohesive `tutor_bench/benchmark/` subpackage; byte-identical outputs vs Insource; Kyle terminology; phased + offline | **Design stage — spec written** |
